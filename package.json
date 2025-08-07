@@ -12,13 +12,14 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "drizzle-kit migrate",
-		"db:studio": "drizzle-kit studio"
+		"db:studio": "drizzle-kit studio",
+		"generate-secrets": "node scripts/generate-secrets.js",
+		"setup-env": "node scripts/generate-secrets.js --create"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^6.0.0",
 		"@sveltejs/kit": "^2.22.0",
 		"@sveltejs/vite-plugin-svelte": "^6.0.0",
-		"@tailwindcss/postcss": "^4.1.11",
 		"@types/bcryptjs": "^2.4.6",
 		"@types/nodemailer": "^6.4.17",
 		"autoprefixer": "^10.4.21",
@@ -32,8 +33,10 @@
 	},
 	"dependencies": {
 		"@auth/core": "^0.40.0",
+		"@auth/drizzle-adapter": "^1.10.0",
 		"@auth/sveltekit": "^1.10.0",
 		"bcryptjs": "^3.0.2",
+		"dotenv": "^17.2.1",
 		"drizzle-orm": "^0.44.4",
 		"nodemailer": "^6.10.1",
 		"postgres": "^3.4.7",

@@ -23,6 +23,7 @@ export const verificationTokens = pgTable('verification_tokens', {
   identifier: text('identifier').notNull(),
   token: text('token').notNull(),
   expires: timestamp('expires', { withTimezone: true }).notNull(),
+  type: varchar('type', { length: 50 }).default('email-verification').notNull(),
 }, (table) => ({
   compoundKey: primaryKey(table.identifier, table.token),
 }));
@@ -70,4 +71,4 @@ export type NewSession = typeof sessions.$inferInsert;
 export type VerificationToken = typeof verificationTokens.$inferSelect;
 export type NewVerificationToken = typeof verificationTokens.$inferInsert;
 export type UserProfile = typeof userProfiles.$inferSelect;
-export type NewUserProfile = typeof userProfiles.$inferInsert; 
+export type NewUserProfile = typeof userProfiles.$inferInsert;
