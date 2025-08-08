@@ -12,6 +12,7 @@ A full-stack authentication application built with SvelteKit, PostgreSQL, and mo
 - **User Profiles**: Profile viewing and editing functionality
 - **Responsive Design**: Mobile-first approach with TailwindCSS
 - **Type Safety**: Full TypeScript implementation with Zod validation
+- **Content Security Policy**: Secure CSP configuration for Auth.js compatibility
 
 ## 🛠️ Technology Stack
 
@@ -22,6 +23,7 @@ A full-stack authentication application built with SvelteKit, PostgreSQL, and mo
 - **Email Service**: Gmail + Nodemailer
 - **Validation**: Zod schemas for type-safe validation
 - **Password Hashing**: bcryptjs with 12+ salt rounds
+- **Security**: Content Security Policy (CSP) with Auth.js compatibility
 
 ## 📋 Prerequisites
 
@@ -91,6 +93,39 @@ npm run dev
 
 Visit `http://localhost:5173` to see the application.
 
+## 🔒 Security Configuration
+
+### Content Security Policy (CSP)
+
+AuthFlow includes a secure CSP configuration that allows Auth.js to function properly while maintaining security:
+
+- **Production CSP**: Restrictive policy with minimal permissions
+- **Development CSP**: More permissive for development tools (HMR, etc.)
+- **Auth.js Compatibility**: Includes `unsafe-eval` directive required by Auth.js
+- **TailwindCSS Support**: Includes `unsafe-inline` for styles
+
+The CSP configuration is located in `src/lib/csp.ts` and is applied dynamically based on the environment.
+
+### CSP Directives
+
+```typescript
+// Production CSP
+{
+  'default-src': ["'self'"],
+  'script-src': ["'self'", "'unsafe-eval'"], // Required for Auth.js
+  'style-src': ["'self'", "'unsafe-inline'"], // Required for TailwindCSS
+  'img-src': ["'self'", 'data:', 'https:'],
+  'font-src': ["'self'"],
+  'connect-src': ["'self'"],
+  'frame-src': ["'self'"],
+  'object-src': ["'none'"],
+  'base-uri': ["'self'"],
+  'form-action': ["'self'"],
+  'frame-ancestors': ["'none'"],
+  'upgrade-insecure-requests': []
+}
+```
+
 ## 📁 Project Structure
 
 ```
@@ -99,12 +134,14 @@ AuthFlow/
 │   ├── lib/
 │   │   ├── db/           # Database configuration and schema
 │   │   ├── validations/  # Zod validation schemas
-│   │   └── utils/        # Utility functions
+│   │   ├── utils/        # Utility functions
+│   │   └── csp.ts        # Content Security Policy configuration
 │   ├── routes/
 │   │   ├── auth/         # Authentication pages
 │   │   ├── dashboard/    # Protected dashboard pages
 │   │   └── api/          # API endpoints
 │   └── app.css          # Global styles with TailwindCSS
+├── tests/               # Test files
 ├── drizzle/             # Database migrations
 ├── static/              # Static assets
 └── env.example          # Environment variables template
@@ -119,6 +156,9 @@ AuthFlow/
 - `npm run db:generate` - Generate database migrations
 - `npm run db:migrate` - Run database migrations
 - `npm run db:studio` - Open Drizzle Studio
+- `npm run test:db` - Test database connection
+- `npm run test:login` - Test login flow
+- `npm run test:otp` - Test OTP functionality
 
 ## 🔐 Security Features
 
@@ -129,6 +169,7 @@ AuthFlow/
 - **Rate Limiting**: Authentication endpoint rate limiting
 - **Email Verification**: Required before account activation
 - **Secure Tokens**: Time-limited verification tokens
+- **Content Security Policy**: Secure CSP with Auth.js compatibility
 
 ## 📧 Email Features
 
@@ -169,6 +210,12 @@ Run migrations in production:
 ```bash
 npm run db:migrate
 ```
+
+### Security Considerations
+
+- The CSP configuration automatically adapts to production/development environments
+- `unsafe-eval` is required for Auth.js functionality but is limited to your domain
+- All other security directives are set to maximum security
 
 ## 🤝 Contributing
 

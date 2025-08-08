@@ -15,7 +15,17 @@
 		"db:push": "drizzle-kit push",
 		"db:studio": "drizzle-kit studio",
 		"generate-secrets": "node scripts/generate-secrets.js",
-		"setup-env": "node scripts/generate-secrets.js --create"
+		"setup-env": "node scripts/generate-secrets.js --create",
+		"test:db": "node tests/test-db.js",
+		"test:login": "node tests/test-login-flow.js",
+		"test:otp": "node tests/test-otp-flow.js",
+		"test:otp-comprehensive": "node tests/test-otp-comprehensive.js",
+		"test:csp": "node tests/test-csp.js",
+		"check:tables": "node tests/check-tables.js",
+		"check:permissions": "node tests/check-permissions.js",
+		"fix:permissions": "node tests/fix-db-permissions.js",
+		"migrate:createdat": "node tests/migrate-add-createdat.js",
+		"test:simple": "node tests/simple-test.js"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^6.0.0",

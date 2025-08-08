@@ -22,6 +22,11 @@
 		verificationSuccess = $page.url.searchParams.get('verified') === 'true';
 		// Check if user just reset their password
 		passwordResetSuccess = $page.url.searchParams.get('reset') === 'true';
+		// Check for login errors from URL parameters
+		const errorParam = $page.url.searchParams.get('error');
+		if (errorParam) {
+			error.set(decodeURIComponent(errorParam));
+		}
 	});
 
 	async function handleSubmit() {
@@ -37,12 +42,16 @@
 				return;
 			}
 
-			// Attempt login
+			console.log('🔐 [login] Attempting login for:', validation.data.email);
+			
+			// Attempt login - this will handle the redirect automatically
 			await loginUser(validation.data);
 			
-			// Redirect to dashboard on success
-			await goto('/dashboard');
+			// Note: loginUser will handle the redirect to dashboard
+			// No need to call goto() here as the redirect is handled in loginUser
+			
 		} catch (err) {
+			console.error('🔐 [login] Login error:', err);
 			const errorMessage = err instanceof Error ? err.message : 'Login failed';
 			error.set(errorMessage);
 		} finally {

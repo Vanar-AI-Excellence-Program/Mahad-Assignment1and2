@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
+	import { logoutUser } from '$lib/utils/auth';
 	import type { LayoutData } from './$types';
 
 	export let data: LayoutData;
@@ -31,6 +32,12 @@
 						<a href="/dashboard" class="btn-secondary text-sm">
 							Dashboard
 						</a>
+						<button
+							on:click={logoutUser}
+							class="btn-secondary text-sm"
+						>
+							Sign out
+						</button>
 					</div>
 				</div>
 			</div>

@@ -5,7 +5,7 @@ import { registerSchema } from '$lib/validations/auth';
 import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
-import { createVerificationToken } from '$lib/utils/token';
+import { createOTP } from '$lib/utils/token';
 import { sendVerificationEmail } from '$lib/utils/email';
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -45,14 +45,14 @@ export const POST: RequestHandler = async ({ request }) => {
       emailVerified: false, // Email verification required
     }).returning();
 
-    // Generate verification token and send verification email
+    // Generate OTP and send verification email
     try {
-      const token = await createVerificationToken(email);
-      const emailSent = await sendVerificationEmail(email, token);
+      const otp = await createOTP(email);
+      const emailSent = await sendVerificationEmail(email, otp);
       
       return json(
         { 
-          message: 'User registered successfully. Please check your email to verify your account.',
+          message: 'User registered successfully. Please check your email for the verification code.',
           user: {
             id: newUser[0].id,
             email: newUser[0].email,

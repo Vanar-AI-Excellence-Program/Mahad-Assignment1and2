@@ -24,52 +24,67 @@ export async function registerUser(data: RegisterFormData) {
 
 export async function loginUser(data: LoginFormData) {
   try {
-    // Use Auth.js built-in signin endpoint
-    const response = await fetch('/auth/signin/credentials', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        email: data.email,
-        password: data.password,
-        callbackUrl: '/dashboard',
-      }),
-    });
+    console.log('🔐 [loginUser] Starting login process for:', data.email);
 
-    if (response.redirected) {
-      window.location.href = response.url;
-      return;
-    }
+    // Create a form and submit it to trigger Auth.js authentication
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/auth/signin/credentials';
+    form.style.display = 'none';
 
-    // If no redirect, check for errors
-    const result = await response.json();
-    if (!response.ok) {
-      throw new Error(result.error || 'Login failed');
-    }
+    // // Add form fields
+    const emailInput = document.createElement('input');
+    emailInput.type = 'hidden';
+    emailInput.name = 'email';
+    emailInput.value = data.email;
+    form.appendChild(emailInput);
 
-    return result;
+    const passwordInput = document.createElement('input');
+    passwordInput.type = 'hidden';
+    passwordInput.name = 'password';
+    passwordInput.value = data.password;
+    form.appendChild(passwordInput);
+
+    const callbackInput = document.createElement('input');
+    callbackInput.type = 'hidden';
+    callbackInput.name = 'callbackUrl';
+    callbackInput.value = '/dashboard';
+    form.appendChild(callbackInput);
+
+    // // Add form to document and submit
+    // document.body.appendChild(form);
+    // form.submit();
+
   } catch (error) {
+    console.error('🔐 [loginUser] Login error:', error);
     throw error;
   }
 }
 
 export async function logoutUser() {
   try {
-    // Use Auth.js built-in signout endpoint
+    console.log('🚪 [logoutUser] Starting logout process');
+    
+    // Use Auth.js signout endpoint
     const response = await fetch('/auth/signout', {
       method: 'POST',
+      redirect: 'manual', // Handle redirects manually
     });
 
-    if (response.redirected) {
-      window.location.href = response.url;
+    console.log('🚪 [logoutUser] Response status:', response.status);
+
+    if (response.status === 302 || response.redirected) {
+      const redirectUrl = response.headers.get('location') || '/';
+      console.log('🚪 [logoutUser] Redirecting to:', redirectUrl);
+      window.location.href = redirectUrl;
       return;
     }
 
     // If no redirect, go to home page
+    console.log('🚪 [logoutUser] No redirect, going to home page');
     window.location.href = '/';
   } catch (error) {
-    console.error('Logout error:', error);
+    console.error('🚪 [logoutUser] Logout error:', error);
     window.location.href = '/';
   }
 } 

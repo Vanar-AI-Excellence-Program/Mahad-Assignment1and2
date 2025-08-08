@@ -43,9 +43,6 @@
 				<a href="/dashboard/profile" class="block w-full text-left btn-secondary">
 					Edit Profile
 				</a>
-				<a href="/dashboard/settings" class="block w-full text-left btn-secondary">
-					Account Settings
-				</a>
 				<button class="w-full btn-secondary">
 					Change Password
 				</button>

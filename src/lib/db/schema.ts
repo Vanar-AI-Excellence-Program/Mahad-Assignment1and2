@@ -24,6 +24,7 @@ export const verificationTokens = pgTable('verification_tokens', {
   token: text('token').notNull(),
   expires: timestamp('expires', { withTimezone: true }).notNull(),
   type: varchar('type', { length: 50 }).default('email-verification').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   compoundKey: primaryKey(table.identifier, table.token),
 }));
