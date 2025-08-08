@@ -8,7 +8,7 @@ import { loginSchema } from '$lib/validations/auth';
 import { eq } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 
-export const { handle, signIn, signOut, getSession } = SvelteKitAuth({
+export const { handle, signIn, signOut } = SvelteKitAuth({
   adapter: DrizzleAdapter(db),
   providers: [
     Credentials({

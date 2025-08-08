@@ -26,35 +26,30 @@ export async function loginUser(data: LoginFormData) {
   try {
     console.log('🔐 [loginUser] Starting login process for:', data.email);
 
-    // Create a form and submit it to trigger Auth.js authentication
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = '/auth/signin/credentials';
-    form.style.display = 'none';
+    const response = await fetch('/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include', // Important for session cookies
+      body: JSON.stringify(data)
+    });
 
-    // // Add form fields
-    const emailInput = document.createElement('input');
-    emailInput.type = 'hidden';
-    emailInput.name = 'email';
-    emailInput.value = data.email;
-    form.appendChild(emailInput);
+    console.log('🔐 [loginUser] Status:', response.status);
 
-    const passwordInput = document.createElement('input');
-    passwordInput.type = 'hidden';
-    passwordInput.name = 'password';
-    passwordInput.value = data.password;
-    form.appendChild(passwordInput);
+    const result = await response.json();
 
-    const callbackInput = document.createElement('input');
-    callbackInput.type = 'hidden';
-    callbackInput.name = 'callbackUrl';
-    callbackInput.value = '/dashboard';
-    form.appendChild(callbackInput);
+    if (!response.ok) {
+      throw new Error(result.error || 'Login failed');
+    }
 
-    // // Add form to document and submit
-    // document.body.appendChild(form);
-    // form.submit();
+    console.log('✅ [loginUser] Login successful, redirecting to dashboard');
+    
+    // Redirect to dashboard on successful login
+    window.location.href = '/reset-password';
 
+    
+    return result;
   } catch (error) {
     console.error('🔐 [loginUser] Login error:', error);
     throw error;

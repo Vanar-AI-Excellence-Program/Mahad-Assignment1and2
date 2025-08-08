@@ -1,4 +1,3 @@
-import { getSession } from '$lib/auth';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 

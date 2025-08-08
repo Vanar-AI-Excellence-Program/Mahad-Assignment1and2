@@ -1,4 +1,3 @@
-import { signIn } from '$lib/auth';
 import { redirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
@@ -9,19 +8,15 @@ export const POST: RequestHandler = async ({ request, url }) => {
   const callbackUrl = formData.get('callbackUrl') as string || '/dashboard';
 
   try {
-    const result = await signIn('credentials', {
+    // For now, redirect to the login page with the credentials
+    // The actual authentication will be handled by the login page
+    const params = new URLSearchParams({
       email,
       password,
-      redirect: false,
+      callbackUrl
     });
-
-    if (result?.error) {
-      // Redirect back to login with error
-      throw redirect(302, `/auth/login?error=${encodeURIComponent(result.error)}`);
-    }
-
-    // Successful login, redirect to callback URL
-    throw redirect(302, callbackUrl);
+    
+    throw redirect(302, `/auth/login?${params.toString()}`);
   } catch (error) {
     if (error instanceof Response) {
       throw error;
