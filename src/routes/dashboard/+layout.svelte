@@ -17,7 +17,7 @@
 				
 				<div class="flex items-center space-x-4">
 					<span class="text-sm text-gray-600">
-						Welcome, {data.session?.user?.email}
+						Welcome, {data.session?.user?.firstName ? `${data.session.user.firstName} ${data.session.user.lastName}` : data.session?.user?.email}
 					</span>
 					<a href="/dashboard/profile" class="btn-secondary text-sm">
 						Profile

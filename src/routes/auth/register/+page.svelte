@@ -8,7 +8,10 @@
 	let formData: RegisterFormData = {
 		email: '',
 		password: '',
-		confirmPassword: ''
+		confirmPassword: '',
+		firstName: '',
+		lastName: '',
+		bio: ''
 	};
 
 	let isLoading = false;
@@ -70,6 +73,60 @@
 			/>
 			{#if formErrors.email}
 				<p class="mt-1 text-sm text-red-600">{formErrors.email}</p>
+			{/if}
+		</div>
+
+		<div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+			<div>
+				<label for="firstName" class="form-label">First Name</label>
+				<input
+					id="firstName"
+					name="firstName"
+					type="text"
+					autocomplete="given-name"
+					required
+					bind:value={formData.firstName}
+					on:input={() => handleInput('firstName')}
+					class="input-field {formErrors.firstName ? 'border-red-500' : ''}"
+					placeholder="Enter your first name"
+				/>
+				{#if formErrors.firstName}
+					<p class="mt-1 text-sm text-red-600">{formErrors.firstName}</p>
+				{/if}
+			</div>
+
+			<div>
+				<label for="lastName" class="form-label">Last Name</label>
+				<input
+					id="lastName"
+					name="lastName"
+					type="text"
+					autocomplete="family-name"
+					required
+					bind:value={formData.lastName}
+					on:input={() => handleInput('lastName')}
+					class="input-field {formErrors.lastName ? 'border-red-500' : ''}"
+					placeholder="Enter your last name"
+				/>
+				{#if formErrors.lastName}
+					<p class="mt-1 text-sm text-red-600">{formErrors.lastName}</p>
+				{/if}
+			</div>
+		</div>
+
+		<div>
+			<label for="bio" class="form-label">Bio (Optional)</label>
+			<textarea
+				id="bio"
+				name="bio"
+				rows="3"
+				bind:value={formData.bio}
+				on:input={() => handleInput('bio')}
+				class="input-field {formErrors.bio ? 'border-red-500' : ''}"
+				placeholder="Tell us about yourself..."
+			></textarea>
+			{#if formErrors.bio}
+				<p class="mt-1 text-sm text-red-600">{formErrors.bio}</p>
 			{/if}
 		</div>
 

@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { db } from '$lib/db';
-import { users, sessions } from '$lib/db/schema';
+import { users, sessions, userProfiles } from '$lib/db/schema';
 import { eq, and, gt } from 'drizzle-orm';
 
 export const load: LayoutServerLoad = async ({ cookies }) => {
@@ -40,12 +40,20 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
 		throw redirect(302, '/login');
 	}
 
+	// Get user profile information
+	const profile = await db.query.userProfiles.findFirst({
+		where: eq(userProfiles.userId, user.id)
+	});
+
 	return {
 		session: {
 			user: {
 				id: user.id,
 				email: user.email,
 				emailVerified: user.emailVerified,
+				firstName: profile?.firstName || '',
+				lastName: profile?.lastName || '',
+				bio: profile?.bio || '',
 			}
 		}
 	};

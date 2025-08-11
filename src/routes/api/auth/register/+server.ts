@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/db';
-import { users } from '$lib/db/schema';
+import { users, userProfiles } from '$lib/db/schema';
 import { registerSchema } from '$lib/validations/auth';
 import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
@@ -21,7 +21,7 @@ export const POST: RequestHandler = async ({ request }) => {
       );
     }
 
-    const { email, password } = validatedFields.data;
+    const { email, password, firstName, lastName, bio } = validatedFields.data;
 
     // Check if user already exists
     const existingUser = await db.query.users.findFirst({
@@ -44,6 +44,14 @@ export const POST: RequestHandler = async ({ request }) => {
       hashedPassword,
       emailVerified: false, // Email verification required
     }).returning();
+
+    // Create user profile
+    await db.insert(userProfiles).values({
+      userId: newUser[0].id,
+      firstName,
+      lastName,
+      bio: bio || null,
+    });
 
     // Generate OTP and send verification email
     try {

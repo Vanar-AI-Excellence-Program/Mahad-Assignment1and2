@@ -49,9 +49,24 @@
 			<h3 class="text-lg font-medium text-gray-900 mb-4">Account Information</h3>
 			<div class="space-y-3">
 				<div>
+					<span class="text-sm font-medium text-gray-500">Name</span>
+					<p class="text-sm text-gray-900">
+						{data.session?.user?.firstName && data.session?.user?.lastName 
+							? `${data.session.user.firstName} ${data.session.user.lastName}`
+							: 'Not set'
+						}
+					</p>
+				</div>
+				<div>
 					<span class="text-sm font-medium text-gray-500">Email</span>
 					<p class="text-sm text-gray-900">{data.session?.user?.email}</p>
 				</div>
+				{#if data.session?.user?.bio}
+					<div>
+						<span class="text-sm font-medium text-gray-500">Bio</span>
+						<p class="text-sm text-gray-900">{data.session.user.bio}</p>
+					</div>
+				{/if}
 				<div>
 					<span class="text-sm font-medium text-gray-500">Email Verified</span>
 					<p class="text-sm text-gray-900">
