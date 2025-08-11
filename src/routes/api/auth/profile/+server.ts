@@ -1,24 +1,38 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/db';
-import { users, userProfiles } from '$lib/db/schema';
+import { users, userProfiles, sessions } from '$lib/db/schema';
 import { profileUpdateSchema } from '$lib/validations/auth';
-import { eq } from 'drizzle-orm';
+import { eq, and, gt } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async ({ locals }) => {
+export const GET: RequestHandler = async ({ cookies }) => {
   try {
-    const session = await locals.getSession();
-    
-    if (!session?.user?.id) {
-      return json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+    // Check if user is authenticated using custom session
+    const sessionToken = cookies.get('authjs.session-token');
+    if (!sessionToken) {
+      return json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // Check if session exists and is valid
+    const session = await db.query.sessions.findFirst({
+      where: and(
+        eq(sessions.sessionToken, sessionToken),
+        gt(sessions.expires, new Date())
+      ),
+      with: {
+        user: true
+      }
+    });
+
+    if (!session || !session.user) {
+      return json({ error: 'Invalid or expired session' }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     
     // Get user profile
     const profile = await db.query.userProfiles.findFirst({
-      where: eq(userProfiles.userId, session.user.id),
+      where: eq(userProfiles.userId, userId),
     });
     
     return json(
@@ -35,17 +49,30 @@ export const GET: RequestHandler = async ({ locals }) => {
   }
 };
 
-export const PUT: RequestHandler = async ({ request, locals }) => {
+export const PUT: RequestHandler = async ({ request, cookies }) => {
   try {
-    const session = await locals.getSession();
-    
-    if (!session?.user?.id) {
-      return json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+    // Check if user is authenticated using custom session
+    const sessionToken = cookies.get('authjs.session-token');
+    if (!sessionToken) {
+      return json({ error: 'Unauthorized' }, { status: 401 });
     }
-    
+
+    // Check if session exists and is valid
+    const session = await db.query.sessions.findFirst({
+      where: and(
+        eq(sessions.sessionToken, sessionToken),
+        gt(sessions.expires, new Date())
+      ),
+      with: {
+        user: true
+      }
+    });
+
+    if (!session || !session.user) {
+      return json({ error: 'Invalid or expired session' }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const body = await request.json();
     
     // Validate input
@@ -61,7 +88,7 @@ export const PUT: RequestHandler = async ({ request, locals }) => {
     
     // Update or create profile
     const existingProfile = await db.query.userProfiles.findFirst({
-      where: eq(userProfiles.userId, session.user.id),
+      where: eq(userProfiles.userId, userId),
     });
     
     let updatedProfile;
@@ -76,14 +103,14 @@ export const PUT: RequestHandler = async ({ request, locals }) => {
           bio,
           updatedAt: new Date(),
         })
-        .where(eq(userProfiles.userId, session.user.id))
+        .where(eq(userProfiles.userId, userId))
         .returning();
     } else {
       // Create new profile
       updatedProfile = await db
         .insert(userProfiles)
         .values({
-          userId: session.user.id,
+          userId: userId,
           firstName,
           lastName,
           bio,

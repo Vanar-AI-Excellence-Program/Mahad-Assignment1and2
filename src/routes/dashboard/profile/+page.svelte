@@ -1,9 +1,6 @@
 <script lang="ts">
-	import type { PageData } from './$types';
 	import { profileUpdateSchema, type ProfileUpdateData } from '$lib/validations/auth';
 	import { onMount } from 'svelte';
-
-	export let data: PageData;
 
 	let formData: ProfileUpdateData = {
 		firstName: '',

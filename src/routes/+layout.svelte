@@ -1,8 +1,6 @@
 <script lang="ts">
 	import '../app.css';
-	import type { LayoutData } from './$types';
-
-	export let data: LayoutData;
+	import { page } from '$app/stores';
 </script>
 
 <svelte:head>
@@ -12,27 +10,29 @@
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">
-	<!-- Navigation -->
-	<nav class="bg-white shadow-sm border-b">
-		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-			<div class="flex justify-between h-16">
-				<div class="flex items-center">
-					<a href="/" class="text-xl font-semibold text-gray-900">
-						AuthFlow
-					</a>
-				</div>
-				
-				<div class="flex items-center space-x-4">
-					<a href="/login" class="btn-secondary text-sm">
-						Sign in
-					</a>
-					<a href="/auth/register" class="btn-primary text-sm">
-						Sign up
-					</a>
+	<!-- Navigation - Only show on non-dashboard routes -->
+	{#if !$page.url.pathname.startsWith('/dashboard')}
+		<nav class="bg-white shadow-sm border-b">
+			<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+				<div class="flex justify-between h-16">
+					<div class="flex items-center">
+						<a href="/" class="text-xl font-semibold text-gray-900">
+							AuthFlow
+						</a>
+					</div>
+					
+					<div class="flex items-center space-x-4">
+						<a href="/login" class="btn-secondary text-sm">
+							Sign in
+						</a>
+						<a href="/auth/register" class="btn-primary text-sm">
+							Sign up
+						</a>
+					</div>
 				</div>
 			</div>
-		</div>
-	</nav>
+		</nav>
+	{/if}
 
 	<main>
 		<slot />

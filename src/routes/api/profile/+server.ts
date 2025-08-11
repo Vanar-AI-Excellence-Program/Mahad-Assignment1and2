@@ -1,21 +1,33 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/db';
-import { userProfiles, users } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { userProfiles, users, sessions } from '$lib/db/schema';
+import { eq, and, gt } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async ({ locals }) => {
+export const GET: RequestHandler = async ({ cookies }) => {
   try {
-    // Check if user is authenticated
-    const session = await locals.getSession();
-    if (!session?.user) {
+    // Check if user is authenticated using custom session
+    const sessionToken = cookies.get('authjs.session-token');
+    if (!sessionToken) {
       return json({ error: 'Unauthorized' }, { status: 401 });
     }
-    
+
+    // Check if session exists and is valid
+    const session = await db.query.sessions.findFirst({
+      where: and(
+        eq(sessions.sessionToken, sessionToken),
+        gt(sessions.expires, new Date())
+      ),
+      with: {
+        user: true
+      }
+    });
+
+    if (!session || !session.user) {
+      return json({ error: 'Invalid or expired session' }, { status: 401 });
+    }
+
     const userId = session.user.id;
-if (!userId) {
-  return json({ error: 'User ID is undefined' }, { status: 400 });
-}
     
     // Get user data
     const userData = await db.query.users.findFirst({
