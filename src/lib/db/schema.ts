@@ -11,11 +11,12 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Sessions table for Auth.js
+// Sessions table for Auth.js DrizzleAdapter
 export const sessions = pgTable('sessions', {
   id: text('id').primaryKey(),
+  sessionToken: text('session_token').notNull().unique(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  expires: timestamp('expires', { withTimezone: true }).notNull(),
 });
 
 // Verification tokens for email verification and password reset

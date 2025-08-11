@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { loginSchema, type LoginFormData } from '$lib/validations/auth';
-	import { loginUser } from '$lib/utils/auth';
 	import { error, clearError } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -44,11 +43,25 @@
 
 			console.log('🔐 [login] Attempting login for:', validation.data.email);
 			
-			// Attempt login - this will handle the redirect automatically
-			await loginUser(validation.data);
+			// Submit to custom login endpoint
+			const response = await fetch('/login', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify(validation.data),
+			});
+
+			const result = await response.json();
+
+			if (!response.ok) {
+				throw new Error(result.error || 'Login failed');
+			}
+
+			console.log('✅ [login] Login successful, redirecting to dashboard');
 			
-			// Note: loginUser will handle the redirect to dashboard
-			// No need to call goto() here as the redirect is handled in loginUser
+			// Redirect to dashboard on success
+			await goto('/dashboard');
 			
 		} catch (err) {
 			console.error('🔐 [login] Login error:', err);
