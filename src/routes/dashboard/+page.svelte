@@ -1,28 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
-	import { goto } from '$app/navigation';
 
 	export let data: PageData;
-
-	async function handleLogout() {
-		try {
-			const response = await fetch('/logout', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-			});
-
-			if (response.ok) {
-				console.log('✅ Logout successful');
-				await goto('/');
-			} else {
-				console.error('❌ Logout failed');
-			}
-		} catch (error) {
-			console.error('❌ Logout error:', error);
-		}
-	}
 </script>
 
 <div class="px-4 sm:px-6 lg:px-8">
@@ -32,14 +11,6 @@
 			<p class="mt-2 text-sm text-gray-700">
 				Welcome to your secure dashboard. Here you can manage your account and profile.
 			</p>
-		</div>
-		<div class="mt-4 sm:mt-0">
-			<button 
-				on:click={handleLogout}
-				class="btn-secondary"
-			>
-				Sign Out
-			</button>
 		</div>
 	</div>
 

@@ -95,7 +95,7 @@
 						autocomplete="email"
 						required
 						bind:value={formData.email}
-						class="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm {formErrors.email ? 'border-red-300' : ''}"
+						class="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm {formErrors.email ? 'border-red-300' : ''}"
 						placeholder="Enter your email"
 					/>
 					{#if formErrors.email}
@@ -114,7 +114,7 @@
 						autocomplete="current-password"
 						required
 						bind:value={formData.password}
-						class="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm {formErrors.password ? 'border-red-300' : ''}"
+						class="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm {formErrors.password ? 'border-red-300' : ''}"
 						placeholder="Enter your password"
 					/>
 					{#if formErrors.password}
@@ -127,7 +127,7 @@
 				<button
 					type="submit"
 					disabled={isLoading}
-					class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+					class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
 				>
 					{#if isLoading}
 						<span class="absolute left-0 inset-y-0 flex items-center pl-3">
@@ -144,7 +144,7 @@
 			</div>
 
 			<div class="text-center">
-				<a href="/auth/register" class="text-primary hover:text-primary-dark">
+				<a href="/auth/register" class="text-primary-600 hover:text-primary-700">
 					Don't have an account? Sign up
 				</a>
 			</div>

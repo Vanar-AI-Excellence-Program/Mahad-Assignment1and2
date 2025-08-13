@@ -1,7 +1,28 @@
 <script lang="ts">
 	import type { LayoutData } from './$types';
+	import { goto } from '$app/navigation';
 
 	export let data: LayoutData;
+
+	async function handleLogout() {
+		try {
+			const response = await fetch('/logout', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+			});
+
+			if (response.ok) {
+				console.log('✅ Logout successful');
+				await goto('/');
+			} else {
+				console.error('❌ Logout failed');
+			}
+		} catch (error) {
+			console.error('❌ Logout error:', error);
+		}
+	}
 </script>
 
 <div class="min-h-screen bg-gray-50">
@@ -22,9 +43,12 @@
 					<a href="/dashboard/profile" class="btn-secondary text-sm">
 						Profile
 					</a>
-					<a href="/logout" class="btn-secondary text-sm">
+					<button
+						on:click={handleLogout}
+						class="btn-secondary text-sm"
+					>
 						Sign out
-					</a>
+					</button>
 				</div>
 			</div>
 		</div>
