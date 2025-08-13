@@ -1,7 +1,34 @@
 <script lang="ts">
 	import type { PageData } from './$types';
+	import { onMount } from 'svelte';
 
 	export let data: PageData;
+
+	let isSendingReset = false;
+	let resetSent = false;
+	let resetError = '';
+
+	async function sendPasswordReset() {
+		resetError = '';
+		resetSent = false;
+		isSendingReset = true;
+		try {
+			const res = await fetch('/api/auth/reset-password/request', {
+				method: 'POST'
+			});
+			const result = await res.json();
+			if (!res.ok) {
+				resetError = result.error || 'Failed to send password reset email';
+				return;
+			}
+
+			resetSent = true;
+		} catch (err) {
+			resetError = 'Network error. Please try again.';
+		} finally {
+			isSendingReset = false;
+		}
+	}
 </script>
 
 <div class="px-4 sm:px-6 lg:px-8">
@@ -58,9 +85,19 @@
 				<a href="/dashboard/profile" class="block w-full text-left btn-secondary">
 					Edit Profile
 				</a>
-				<button class="w-full btn-secondary">
-					Change Password
+				<button class="w-full btn-secondary" on:click={sendPasswordReset} disabled={isSendingReset}>
+					{#if isSendingReset}
+						Sending reset email...
+					{:else}
+						Send Password Reset Email
+					{/if}
 				</button>
+				{#if resetSent}
+					<p class="text-sm text-green-600">Password reset email sent to {data.session?.user?.email}.</p>
+				{/if}
+				{#if resetError}
+					<p class="text-sm text-red-600">{resetError}</p>
+				{/if}
 			</div>
 		</div>
 

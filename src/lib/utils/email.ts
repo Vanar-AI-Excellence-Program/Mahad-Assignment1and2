@@ -52,7 +52,8 @@ export async function sendVerificationEmail(email: string, otp: string) {
 
 // Password reset template
 export async function sendPasswordResetEmail(email: string, token: string) {
-  const resetUrl = `${env.PUBLIC_APP_URL}/auth/reset-password?token=${token}`;
+  const appUrl = env.PUBLIC_APP_URL || env.AUTH_URL || 'http://localhost:5173';
+  const resetUrl = `${appUrl}/auth/reset-password?token=${token}`;
   
   const mailOptions = {
     from: `"AuthFlow" <${env.GMAIL_USER}>`,
