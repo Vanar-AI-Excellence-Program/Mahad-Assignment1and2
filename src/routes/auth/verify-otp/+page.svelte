@@ -33,13 +33,12 @@
 
 			const result = await response.json();
 
-			console.log("here")
-			// if (response.ok) {
-			// 	success = true;
-			// 	// Redirect to dashboard after a short delay
-			// 	setTimeout(() => {
-			// 		goto('/dashboard?verified=true');
-			// 	}, 2000);
+			if (response.ok) {
+				success = true;
+				// Redirect to dashboard after a short delay
+				setTimeout(() => {
+					goto('/dashboard?verified=true');
+				}, 2000);
 			} else {
 				error = result.error || 'Verification failed';
 			}
