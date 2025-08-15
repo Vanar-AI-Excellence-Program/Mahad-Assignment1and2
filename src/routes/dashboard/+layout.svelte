@@ -34,6 +34,11 @@
 					<a href="/dashboard" class="text-xl font-semibold text-gray-900">
 						AuthFlow Dashboard
 					</a>
+					{#if (data.session?.user as any)?.role === 'admin'}
+						<a href="/admin" class="ml-6 text-sm text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded">
+							Admin
+						</a>
+					{/if}
 				</div>
 				
 				<div class="flex items-center space-x-4">

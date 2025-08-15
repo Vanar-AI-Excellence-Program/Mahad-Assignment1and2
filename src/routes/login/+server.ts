@@ -83,13 +83,14 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		});
 
 		// Return success - the session is now stored in the database
-		return json({
+        return json({
 			success: true,
 			message: 'Login successful',
 			user: {
 				id: user.id,
 				email: user.email,
-				emailVerified: user.emailVerified,
+                emailVerified: user.emailVerified,
+                role: (user as any).role,
 			}
 		});
 

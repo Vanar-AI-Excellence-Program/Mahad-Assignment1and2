@@ -10,8 +10,8 @@
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">
-	<!-- Navigation - Show only on public routes (not dashboard) -->
-	{#if !$page.url.pathname.startsWith('/dashboard')}
+	<!-- Navigation - Show only on public routes (not dashboard or admin) -->
+	{#if !$page.url.pathname.startsWith('/dashboard') && !$page.url.pathname.startsWith('/admin')}
 	<nav class="bg-white shadow-sm border-b">
 		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 			<div class="flex justify-between h-16">

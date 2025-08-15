@@ -1,17 +1,62 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 
 	let otp = '';
 	let isLoading = false;
 	let error = '';
 	let success = false;
+	let resendLoading = false;
+	let resendSuccess = false;
+	let userEmail = '';
 
 	onMount(() => {
+		// Get email from URL parameters
+		userEmail = $page.url.searchParams.get('email') || '';
+		
 		// Focus on the first input
 		const firstInput = document.querySelector('input[type="text"]') as HTMLInputElement;
 		if (firstInput) firstInput.focus();
 	});
+
+	async function resendOTP() {
+		if (!userEmail) {
+			error = 'Email address not found. Please go back to registration.';
+			return;
+		}
+
+		resendLoading = true;
+		resendSuccess = false;
+		error = '';
+
+		try {
+			const response = await fetch('/api/auth/resend-otp', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ email: userEmail }),
+			});
+
+			const result = await response.json();
+
+			if (response.ok) {
+				resendSuccess = true;
+				setTimeout(() => {
+					resendSuccess = false;
+				}, 3000);
+			} else {
+				error = result.error || 'Failed to resend verification code';
+			}
+		} catch (err) {
+			error = 'Network error. Please try again.';
+		} finally {
+			resendLoading = false;
+		}
+	}
+
+
 
 	async function handleSubmit() {
 		if (otp.length !== 6) {
@@ -84,7 +129,7 @@
 	<div class="text-center mb-6">
 		<h2 class="text-2xl font-bold text-gray-900">Verify Your Email</h2>
 		<p class="mt-2 text-sm text-gray-600">
-			We've sent a 6-digit verification code to your email address.
+			We've sent a 6-digit verification code to <strong>{userEmail}</strong>.
 		</p>
 	</div>
 
@@ -138,14 +183,23 @@
 			</button>
 		</form>
 
-		<div class="mt-6 text-center">
-			<p class="text-sm text-gray-600">
-				Didn't receive the code?
-				<a href="/auth/resend-otp" class="font-medium text-indigo-600 hover:text-indigo-500">
-					Resend Code
-				</a>
-			</p>
-			<p class="mt-2 text-sm">
+		<div class="mt-6 text-center space-y-3">
+			{#if resendSuccess}
+				<p class="text-sm text-green-600">✅ Verification code resent successfully!</p>
+			{/if}
+			
+			<div class="flex flex-col sm:flex-row gap-3 justify-center items-center">
+				<p class="text-sm text-gray-600">Didn't receive the code?</p>
+				<button
+					on:click={resendOTP}
+					disabled={resendLoading}
+					class="font-medium text-indigo-600 hover:text-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+				>
+					{resendLoading ? 'Sending...' : 'Resend Code'}
+				</button>
+			</div>
+			
+			<p class="text-sm">
 				<a href="/auth/login" class="font-medium text-indigo-600 hover:text-indigo-500">
 					Back to Sign In
 				</a>

@@ -43,6 +43,7 @@ export const POST: RequestHandler = async ({ request }) => {
       email,
       hashedPassword,
       emailVerified: false, // Email verification required
+      role: 'user',
     }).returning();
 
     // Create user profile

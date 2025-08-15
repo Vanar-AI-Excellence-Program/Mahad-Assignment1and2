@@ -35,11 +35,10 @@
 			}
 
 			// Attempt registration
-			await registerUser(validation.data);
+			const result = await registerUser(validation.data);
 			
-			// Show success message and redirect to login
-			alert('Registration successful! Please sign in.');
-			await goto('/auth/login');
+			// Redirect to verification page with email
+			await goto(`/auth/verify-otp?email=${encodeURIComponent(formData.email)}`);
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Registration failed';
 			error.set(errorMessage);
