@@ -4,7 +4,7 @@ import { env } from '$env/dynamic/private';
 import * as schema from './schema';
 
 // Database connection
-const connectionString = env.DATABASE_URL || 'postgresql://localhost:5432/authflow';
+const connectionString = env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5433/mydatabase';
 
 // Create postgres client
 const client = postgres(connectionString, {

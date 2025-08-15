@@ -25,7 +25,15 @@
 		"check:permissions": "node tests/check-permissions.js",
 		"fix:permissions": "node tests/fix-db-permissions.js",
 		"migrate:createdat": "node tests/migrate-add-createdat.js",
-		"test:simple": "node tests/simple-test.js"
+		"test:simple": "node tests/simple-test.js",
+		"docker:up": "docker-compose up -d",
+		"docker:down": "docker-compose down",
+		"docker:restart": "docker-compose restart",
+		"docker:logs": "docker-compose logs -f postgres",
+		"docker:status": "docker-compose ps",
+		"docker:clean": "docker-compose down -v",
+		"docker:rebuild": "docker-compose down && docker-compose up -d --build",
+		"db:setup": "npm run docker:up && sleep 5 && npm run db:migrate"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^6.0.0",

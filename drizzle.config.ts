@@ -6,7 +6,7 @@ export default {
   out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {
-    url: env.DATABASE_URL || 'postgresql://localhost:5432/authflow',
+    url: env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5433/mydatabase',
   },
   verbose: true,
   strict: true,

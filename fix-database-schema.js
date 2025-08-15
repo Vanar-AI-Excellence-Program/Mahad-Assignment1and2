@@ -1,6 +1,6 @@
 import postgres from 'postgres';
 
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://localhost:5432/authflow';
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5433/mydatabase';
 const client = postgres(DATABASE_URL);
 
 async function fixDatabaseSchema() {

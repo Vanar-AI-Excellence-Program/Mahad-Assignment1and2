@@ -3,7 +3,7 @@ import { config } from 'dotenv';
 
 config();
 
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://authflow_user:password@localhost:5432/authflow';
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5433/mydatabase';
 const client = postgres(DATABASE_URL);
 
 async function addCreatedAtColumn() {

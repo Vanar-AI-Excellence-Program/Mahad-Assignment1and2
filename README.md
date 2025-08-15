@@ -54,7 +54,7 @@ Edit `.env` with your configuration:
 
 ```env
 # Database
-DATABASE_URL="postgresql://username:password@localhost:5432/authflow"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/mydatabase"
 
 # Authentication
 AUTH_SECRET="your-auth-secret-key-here"
@@ -210,7 +210,7 @@ AuthFlow/
 Ensure all environment variables are set in production:
 
 ```env
-DATABASE_URL="your-production-database-url"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/mydatabase"
 AUTH_SECRET="your-production-auth-secret"
 AUTH_URL="https://your-domain.com"
 GMAIL_USER="your-gmail-address"

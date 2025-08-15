@@ -4,7 +4,7 @@ import { config } from 'dotenv';
 // Load environment variables
 config();
 
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://localhost:5432/authflow';
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5433/mydatabase';
 
 console.log('🔍 Testing database connection...');
 console.log(`Database URL: ${DATABASE_URL.replace(/:[^:@]*@/, ':****@')}`);

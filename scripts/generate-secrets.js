@@ -45,7 +45,7 @@ const envContent = `# ==========================================================
 # =============================================================================
 # DATABASE CONFIGURATION
 # =============================================================================
-DATABASE_URL="postgresql://authflow_user:${dbPassword}@localhost:5432/authflow"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/mydatabase"
 
 # =============================================================================
 # AUTHENTICATION SECRETS (REQUIRED)
