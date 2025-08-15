@@ -51,6 +51,7 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
 				id: user.id,
 				email: user.email,
 				emailVerified: user.emailVerified,
+				role: (user as any).role,
 				firstName: profile?.firstName || '',
 				lastName: profile?.lastName || '',
 				bio: profile?.bio || '',

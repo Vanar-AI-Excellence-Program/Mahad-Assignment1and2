@@ -92,12 +92,14 @@
 						Send Password Reset Email
 					{/if}
 				</button>
+
 				{#if resetSent}
 					<p class="text-sm text-green-600">Password reset email sent to {data.session?.user?.email}.</p>
 				{/if}
 				{#if resetError}
 					<p class="text-sm text-red-600">{resetError}</p>
 				{/if}
+
 			</div>
 		</div>
 

@@ -73,11 +73,12 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
 
 		// Upsert user
 		let user = await db.query.users.findFirst({ where: eq(users.email, primaryEmail) });
-		if (!user) {
+        if (!user) {
 			const newUser = await db.insert(users).values({
 				email: primaryEmail,
 				hashedPassword: 'oauth-github',
-				emailVerified: true
+                emailVerified: true,
+                role: 'user'
 			}).returning();
 			user = newUser[0];
 			await db.insert(userProfiles).values({

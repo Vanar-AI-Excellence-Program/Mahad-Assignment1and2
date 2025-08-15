@@ -55,7 +55,7 @@
 			</div>
 			
 			<div class="mt-12 space-x-4">
-				<a href="/auth/login" class="btn-primary">
+				<a href="/login" class="btn-primary">
 					Get Started
 				</a>
 				<a href="/auth/register" class="btn-secondary">
