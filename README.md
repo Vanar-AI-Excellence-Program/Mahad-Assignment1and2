@@ -10,6 +10,7 @@ A full-stack authentication application built with SvelteKit, PostgreSQL, and mo
 - **Session Management**: Database-stored sessions (no JWT)
 - **Protected Routes**: Authentication guards for secure pages
 - **User Profiles**: Profile viewing and editing functionality
+- **AI Chatbot**: Powered by Google Gemini for intelligent conversations
 - **Responsive Design**: Mobile-first approach with TailwindCSS
 - **Type Safety**: Full TypeScript implementation with Zod validation
 - **Content Security Policy**: Secure CSP configuration for Auth.js compatibility
@@ -63,6 +64,9 @@ AUTH_URL="http://localhost:5173"
 GMAIL_USER="your-email@gmail.com"
 GMAIL_APP_PASSWORD="your-gmail-app-password"
 
+# AI Services
+GEMINI_API_KEY="your_gemini_api_key_here"
+
 # Application
 PUBLIC_APP_URL="http://localhost:5173"
 ```
@@ -85,7 +89,18 @@ npm run db:migrate
    - Generate password for "Mail"
 3. Use the generated password in `GMAIL_APP_PASSWORD`
 
-### 5. Start Development Server
+### 5. AI Chatbot Setup
+
+To enable the AI chatbot feature:
+
+1. Get a Gemini API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Add your API key to the `.env` file:
+   ```env
+   GEMINI_API_KEY="your_gemini_api_key_here"
+   ```
+3. The chatbot will be available at `/dashboard/chatbot` for authenticated users
+
+### 6. Start Development Server
 
 ```bash
 npm run dev
