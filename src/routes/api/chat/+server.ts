@@ -5,6 +5,13 @@ import { db } from '$lib/db';
 import { sessions, chats } from '$lib/db/schema';
 import { eq, and, gt } from 'drizzle-orm';
 import { config } from '$lib/config/env';
+import { buildChatTree } from '$lib/utils/chat-tree';
+
+interface ChatMessage {
+	id?: string;
+	role: 'user' | 'assistant';
+	content: string;
+}
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
 	try {
@@ -30,7 +37,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 			return new Response('Unauthorized', { status: 401 });
 		}
 
-		const { messages } = await request.json();
+		const { messages, parentId }: { messages: ChatMessage[]; parentId?: string } = await request.json();
 
 		// Validate messages
 		if (!messages || !Array.isArray(messages)) {
@@ -43,14 +50,30 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 			return new Response('AI service not configured', { status: 500 });
 		}
 
-		// Save user message to database
+		// Save user message to database with parent_id
 		const userMessage = messages[messages.length - 1];
+		let savedUserMessageId: string | undefined;
+		
 		if (userMessage.role === 'user') {
+			// Insert user message and get the ID
 			await db.insert(chats).values({
 				userId: session.user.id,
+				parentId: parentId || null, // null for new conversation, parent_id for forking
 				role: 'user',
 				content: userMessage.content
 			});
+			
+			// Get the ID of the just-inserted message
+			const savedMessage = await db.query.chats.findFirst({
+				where: and(
+					eq(chats.userId, session.user.id),
+					eq(chats.content, userMessage.content),
+					eq(chats.role, 'user')
+				),
+				orderBy: chats.createdAt,
+			});
+			
+			savedUserMessageId = savedMessage?.id;
 		}
 
 		// Create a ReadableStream for streaming the response
@@ -60,7 +83,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 					// Generate streaming response using Gemini
 					const result = await streamText({
 						model: google('gemini-2.0-flash'),
-						messages: messages.map((msg: any) => ({
+						messages: messages.map((msg: ChatMessage) => ({
 							role: msg.role,
 							content: msg.content
 						})),
@@ -78,9 +101,10 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 					}
 
 					// Save assistant message to database after streaming completes
-					if (fullContent.trim()) {
+					if (fullContent.trim() && savedUserMessageId) {
 						await db.insert(chats).values({
 							userId: session.user.id,
+							parentId: savedUserMessageId, // Link to the user message
 							role: 'assistant',
 							content: fullContent
 						});
@@ -113,6 +137,52 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 
 	} catch (error) {
 		console.error('Chat API error:', error);
+		return new Response('Internal server error', { status: 500 });
+	}
+};
+
+// GET endpoint to fetch tree-structured chat history
+export const GET: RequestHandler = async ({ cookies }) => {
+	try {
+		// Check authentication
+		const sessionToken = cookies.get('authjs.session-token');
+
+		if (!sessionToken) {
+			return new Response('Unauthorized', { status: 401 });
+		}
+
+		// Check if session exists and is valid
+		const session = await db.query.sessions.findFirst({
+			where: and(
+				eq(sessions.sessionToken, sessionToken),
+				gt(sessions.expires, new Date())
+			),
+			with: {
+				user: true
+			}
+		});
+
+		if (!session || !session.user) {
+			return new Response('Unauthorized', { status: 401 });
+		}
+
+		// Fetch all chat messages for the user
+		const userMessages = await db.query.chats.findMany({
+			where: eq(chats.userId, session.user.id),
+			orderBy: chats.createdAt,
+		});
+
+		// Build tree structure
+		const chatTree = buildChatTree(userMessages);
+
+		return new Response(JSON.stringify(chatTree), {
+			headers: {
+				'Content-Type': 'application/json',
+			},
+		});
+
+	} catch (error) {
+		console.error('Chat history API error:', error);
 		return new Response('Internal server error', { status: 500 });
 	}
 };

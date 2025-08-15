@@ -46,6 +46,7 @@ export const userProfiles = pgTable('user_profiles', {
 export const chats = pgTable('chats', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  parentId: uuid('parent_id').references(() => chats.id, { onDelete: 'cascade' }),
   role: text('role', { enum: ['user', 'assistant'] }).notNull(),
   content: text('content').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -75,10 +76,18 @@ export const userProfilesRelations = relations(userProfiles, ({ one }) => ({
   }),
 }));
 
-export const chatsRelations = relations(chats, ({ one }) => ({
+export const chatsRelations = relations(chats, ({ one, many }) => ({
   user: one(users, {
     fields: [chats.userId],
     references: [users.id],
+  }),
+  parent: one(chats, {
+    fields: [chats.parentId],
+    references: [chats.id],
+    relationName: 'chat_parent_child',
+  }),
+  children: many(chats, {
+    relationName: 'chat_parent_child',
   }),
 }));
 
