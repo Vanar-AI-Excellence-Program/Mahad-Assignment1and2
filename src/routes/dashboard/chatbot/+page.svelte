@@ -4,6 +4,7 @@
 	let messages: any[] = [];
 	let input = '';
 	let isLoading = false;
+	let currentStreamingMessage = '';
 
 	async function handleChatSubmit(event: Event) {
 		event.preventDefault();
@@ -14,6 +15,7 @@
 			// Add user message
 			messages = [...messages, { role: 'user', content: userMessage }];
 			isLoading = true;
+			currentStreamingMessage = '';
 
 			try {
 				const response = await fetch('/api/chat', {
@@ -25,17 +27,65 @@
 				});
 
 				if (response.ok) {
-					const result = await response.json();
-					messages = [...messages, { role: 'assistant', content: result.content }];
+					// Add assistant message placeholder
+					messages = [...messages, { role: 'assistant', content: '' }];
+					
+					// Handle streaming response
+					const reader = response.body?.getReader();
+					if (reader) {
+						const decoder = new TextDecoder();
+						
+						while (true) {
+							const { done, value } = await reader.read();
+							if (done) break;
+							
+							const chunk = decoder.decode(value);
+							const lines = chunk.split('\n');
+							
+							for (const line of lines) {
+								if (line.startsWith('data: ')) {
+									const data = line.slice(6);
+									
+									if (data === '[DONE]') {
+										// Streaming finished, update the last message
+										const lastMessageIndex = messages.length - 1;
+										messages[lastMessageIndex] = {
+											...messages[lastMessageIndex],
+											content: currentStreamingMessage
+										};
+										messages = [...messages];
+										break;
+									}
+									
+									try {
+										const parsed = JSON.parse(data);
+										if (parsed.chunk) {
+											currentStreamingMessage += parsed.chunk;
+											// Update the last message in real-time
+											const lastMessageIndex = messages.length - 1;
+											messages[lastMessageIndex] = {
+												...messages[lastMessageIndex],
+												content: currentStreamingMessage
+											};
+											messages = [...messages];
+										}
+									} catch (e) {
+										console.error('Error parsing chunk:', e);
+									}
+								}
+							}
+						}
+					}
 				} else {
-					const error = await response.json();
-					messages = [...messages, { role: 'assistant', content: `Error: ${error.error || 'Failed to get response'}` }];
+					const error = await response.text();
+					messages = [...messages, { role: 'assistant', content: `Error: ${error || 'Failed to get response'}` }];
 				}
 			} catch (error) {
 				console.error('Chat error:', error);
 				messages = [...messages, { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' }];
 			} finally {
 				isLoading = false;
+				currentStreamingMessage = '';
 			}
 		}
 	}
@@ -129,13 +179,18 @@
 								</div>
 							{/if}
 							<div class="prose prose-sm max-w-none">
-								<p class="text-base leading-relaxed whitespace-pre-wrap">{message.content}</p>
+								<p class="text-base leading-relaxed whitespace-pre-wrap">
+									{message.content}
+									{#if isLoading && message.role === 'assistant' && message.content === ''}
+										<span class="inline-block w-2 h-4 bg-blue-500 animate-pulse"></span>
+									{/if}
+								</p>
 							</div>
 						</div>
 					</div>
 				{/each}
 
-				{#if isLoading}
+				{#if isLoading && currentStreamingMessage === ''}
 					<div class="flex justify-start">
 						<div class="max-w-2xl px-6 py-4 rounded-2xl bg-gray-50 border border-gray-200">
 							<div class="flex items-center space-x-3 mb-2">
