@@ -109,6 +109,95 @@
 		return result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 	}
 
+	// Format message content with markdown-like formatting
+	function formatMessage(content: string): string {
+		if (!content) return '';
+		
+		let formatted = content;
+		
+		// Headers (must be at start of line)
+		formatted = formatted
+			.replace(/^### (.*$)/gim, '<h3>$1</h3>')
+			.replace(/^## (.*$)/gim, '<h2>$1</h2>')
+			.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+		
+		// Code blocks (must be before other formatting)
+		formatted = formatted
+			.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+		
+		// Inline code
+		formatted = formatted
+			.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+		
+		// Bold text
+		formatted = formatted
+			.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+			.replace(/__(.*?)__/g, '<strong>$1</strong>');
+		
+		// Italic text
+		formatted = formatted
+			.replace(/\*(.*?)\*/g, '<em>$1</em>')
+			.replace(/_(.*?)_/g, '<em>$1</em>');
+		
+		// Process lists - convert to li elements first
+		formatted = formatted
+			.replace(/^(\s*)[*\-] (.*$)/gim, function(match, spaces, content) {
+				const indent = spaces.length;
+				return `<li style="margin-left: ${indent * 1.5}rem">${content}</li>`;
+			})
+			.replace(/^(\s*)(\d+)\. (.*$)/gim, function(match, spaces, number, content) {
+				const indent = spaces.length;
+				return `<li style="margin-left: ${indent * 1.5}rem">${content}</li>`;
+			});
+		
+		// Blockquotes
+		formatted = formatted
+			.replace(/^> (.*$)/gim, '<blockquote><p>$1</p></blockquote>');
+		
+		// Horizontal rules
+		formatted = formatted
+			.replace(/^---$/gim, '<hr>')
+			.replace(/^\*\*\*$/gim, '<hr>');
+		
+		// Links
+		formatted = formatted
+			.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+		
+		// Line breaks and paragraphs
+		formatted = formatted
+			.replace(/\n\n/g, '</p><p>')
+			.replace(/\n/g, '<br>');
+		
+		// Wrap in paragraph tags
+		formatted = formatted
+			.replace(/^(.*)$/gm, '<p>$1</p>');
+		
+		// Clean up empty paragraphs and fix list formatting
+		formatted = formatted
+			.replace(/<p><\/p>/g, '')
+			.replace(/<p><br><\/p>/g, '')
+			.replace(/<p><li>/g, '<li>')
+			.replace(/<\/li><\/p>/g, '</li>')
+			.replace(/<p><h1>/g, '<h1>')
+			.replace(/<\/h1><\/p>/g, '</h1>')
+			.replace(/<p><h2>/g, '<h2>')
+			.replace(/<\/h2><\/p>/g, '</h2>')
+			.replace(/<p><h3>/g, '<h3>')
+			.replace(/<\/h3><\/p>/g, '</h3>')
+			.replace(/<p><pre>/g, '<pre>')
+			.replace(/<\/pre><\/p>/g, '</pre>')
+			.replace(/<p><blockquote>/g, '<blockquote>')
+			.replace(/<\/blockquote><\/p>/g, '</blockquote>')
+			.replace(/<p><hr><\/p>/g, '<hr>');
+		
+		// Final cleanup
+		formatted = formatted
+			.replace(/^<p>/, '')
+			.replace(/<\/p>$/, '');
+		
+		return formatted;
+	}
+
 	async function handleChatSubmit(event: Event) {
 		event.preventDefault();
 		if (input.trim() && !isLoading) {
@@ -209,17 +298,17 @@
 	<title>Chatbot - AuthFlow Dashboard</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gray-50 p-4">
-	<div class="max-w-7xl mx-auto h-[calc(100vh-2rem)] flex">
+<div class="min-h-screen bg-gray-50 p-2 sm:p-4">
+	<div class="max-w-7xl mx-auto h-[calc(100vh-6rem)] sm:h-[calc(100vh-8rem)] flex flex-col lg:flex-row">
 		<!-- Chat History Sidebar -->
 		{#if showHistory}
-			<div class="w-80 bg-white rounded-l-xl shadow-sm border-r border-gray-200 flex flex-col">
-				<div class="p-6 border-b border-gray-200">
+			<div class="w-full lg:w-80 bg-white rounded-t-xl lg:rounded-l-xl lg:rounded-t-none shadow-sm border-b-2 lg:border-r-2 lg:border-b-0 border-gray-100 flex flex-col flex-shrink-0">
+				<div class="p-4 lg:p-6 border-b-2 border-gray-100">
 					<div class="flex items-center justify-between mb-4">
-						<h2 class="text-xl font-semibold text-gray-900">Chat History</h2>
+						<h2 class="text-lg lg:text-xl font-semibold text-gray-900">Chat History</h2>
 						<button
 							on:click={startNewChat}
-							class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+							class="px-3 lg:px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md transform hover:scale-105 active:scale-95"
 						>
 							New Chat
 						</button>
@@ -227,11 +316,11 @@
 					<p class="text-sm text-gray-600">Your previous conversations and branches</p>
 				</div>
 				
-				<div class="flex-1 overflow-y-auto p-4 space-y-3">
+				<div class="flex-1 overflow-y-auto p-3 lg:p-4 space-y-3 max-h-64 lg:max-h-none">
 					{#if chatHistory.length === 0}
-						<div class="text-center text-gray-500 py-8">
-							<div class="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
-								<svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<div class="text-center text-gray-500 py-6 lg:py-8">
+							<div class="w-12 h-12 lg:w-16 lg:h-16 mx-auto mb-3 lg:mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+								<svg class="w-6 h-6 lg:w-8 lg:h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
 								</svg>
 							</div>
@@ -243,17 +332,17 @@
 							<div class="space-y-2">
 								<button
 									on:click={() => loadConversation(conversation)}
-									class="w-full text-left p-3 rounded-lg hover:bg-gray-50 transition-colors border border-gray-200"
+									class="w-full text-left p-2 lg:p-3 rounded-lg hover:bg-blue-50 transition-all duration-200 border-2 border-gray-100 hover:border-blue-200 hover:shadow-sm"
 								>
-									<div class="flex items-start space-x-3">
-										<div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-											<svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<div class="flex items-start space-x-2 lg:space-x-3">
+										<div class="w-6 h-6 lg:w-8 lg:h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+											<svg class="w-3 h-3 lg:w-4 lg:h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
 											</svg>
 										</div>
 										<div class="flex-1 min-w-0">
-											<p class="text-sm font-medium text-gray-900 truncate">
-												{conversation.content.substring(0, 50)}{conversation.content.length > 50 ? '...' : ''}
+											<p class="text-xs lg:text-sm font-medium text-gray-900 truncate">
+												{conversation.content.substring(0, 40)}...
 											</p>
 											<p class="text-xs text-gray-500">
 												{new Date(conversation.createdAt).toLocaleDateString()}
@@ -264,10 +353,10 @@
 								
 								<button
 									on:click={() => forkConversation(conversation.id)}
-									class="w-full text-left p-2 rounded-lg hover:bg-green-50 transition-colors text-sm text-green-600 border border-green-200 hover:border-green-300"
+									class="w-full text-left p-1 lg:p-2 rounded-lg hover:bg-green-50 transition-all duration-200 text-xs text-green-600 border-2 border-green-100 hover:border-green-200 hover:shadow-sm"
 								>
 									<div class="flex items-center space-x-2">
-										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<svg class="w-3 h-3 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
 										</svg>
 										<span>Fork from here</span>
@@ -275,22 +364,22 @@
 								</button>
 								
 								{#if conversation.children && conversation.children.length > 0}
-									<div class="ml-6 space-y-2">
+									<div class="ml-3 lg:ml-6 space-y-2">
 										{#each conversation.children as child}
 											<div class="space-y-2">
 												<button
 													on:click={() => loadConversation(child)}
-													class="w-full text-left p-2 rounded-lg hover:bg-gray-50 transition-colors border border-gray-100 text-sm"
+													class="w-full text-left p-1 lg:p-2 rounded-lg hover:bg-purple-50 transition-all duration-200 border-2 border-gray-100 hover:border-purple-200 hover:shadow-sm text-xs lg:text-sm"
 												>
 													<div class="flex items-start space-x-2">
-														<div class="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
-															<svg class="w-3 h-3 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<div class="w-4 h-4 lg:w-6 lg:h-6 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+															<svg class="w-2 h-2 lg:w-3 lg:h-3 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
 															</svg>
 														</div>
 														<div class="flex-1 min-w-0">
-															<p class="text-sm text-gray-700 truncate">
-																{child.content.substring(0, 40)}{child.content.length > 40 ? '...' : ''}
+															<p class="text-xs lg:text-sm text-gray-700 truncate">
+																{child.content.substring(0, 30)}...
 															</p>
 															<p class="text-xs text-gray-500">
 																{new Date(child.createdAt).toLocaleDateString()}
@@ -301,10 +390,10 @@
 												
 												<button
 													on:click={() => forkConversation(child.id)}
-													class="w-full text-left p-1 rounded hover:bg-green-50 transition-colors text-xs text-green-600 border border-green-100 hover:border-green-200 ml-4"
+													class="w-full text-left p-1 rounded hover:bg-green-50 transition-all duration-200 text-xs text-green-600 border-2 border-green-100 hover:border-green-200 hover:shadow-sm ml-2 lg:ml-4"
 												>
 													<div class="flex items-center space-x-1">
-														<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<svg class="w-2 h-2 lg:w-3 lg:h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
 														</svg>
 														<span>Fork</span>
@@ -322,64 +411,64 @@
 		{/if}
 
 		<!-- Main Chat Area -->
-		<div class="flex-1 flex flex-col">
+		<div class="flex-1 flex flex-col min-h-0">
 			<!-- Chat Header -->
-			<div class="bg-white rounded-r-xl shadow-sm border-b border-gray-200 px-6 py-4">
+			<div class="bg-white rounded-b-xl lg:rounded-r-xl lg:rounded-b-none shadow-sm border-b-2 lg:border-b-0 border-gray-100 px-4 lg:px-6 py-3 lg:py-4 flex-shrink-0">
 				<div class="flex items-center justify-between">
-					<div class="flex items-center space-x-3">
+					<div class="flex items-center space-x-2 lg:space-x-3">
 						{#if showHistory}
 							<button
 								on:click={() => showHistory = false}
-								class="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+								class="p-1.5 lg:p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600 hover:text-gray-800"
 								aria-label="Hide chat history sidebar"
 							>
-								<svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg class="w-4 h-4 lg:w-5 lg:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
 								</svg>
 							</button>
 						{:else}
 							<button
 								on:click={() => showHistory = true}
-								class="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+								class="p-1.5 lg:p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600 hover:text-gray-800"
 								aria-label="Show chat history sidebar"
 							>
-								<svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg class="w-4 h-4 lg:w-5 lg:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
 								</svg>
 							</button>
 						{/if}
 						
-						<div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
-							<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<div class="w-8 h-8 lg:w-12 lg:h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
+							<svg class="w-4 h-4 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
 							</svg>
 						</div>
 						<div>
-							<h1 class="text-2xl font-bold text-gray-900">AI Assistant</h1>
-							<p class="text-gray-600 text-sm">Powered by Gemini 2.0 Flash</p>
+							<h1 class="text-lg lg:text-2xl font-bold text-gray-900">AI Assistant</h1>
+							<p class="text-xs lg:text-sm text-gray-600">Powered by Gemini 2.0 Flash</p>
 						</div>
 					</div>
 					<div class="flex items-center space-x-2">
-						<div class="w-3 h-3 bg-green-500 rounded-full"></div>
-						<span class="text-sm text-gray-500">Online</span>
+						<div class="w-2 h-2 lg:w-3 lg:h-3 bg-green-500 rounded-full animate-pulse"></div>
+						<span class="text-xs lg:text-sm text-gray-600 font-medium">Online</span>
 					</div>
 				</div>
 			</div>
 
 			<!-- Chat Messages Area -->
-			<div class="flex-1 bg-white overflow-hidden">
-				<div id="chat-container" class="h-full overflow-y-auto p-6 space-y-6">
+			<div class="flex-1 bg-white overflow-hidden min-h-0">
+				<div id="chat-container" class="h-full overflow-y-auto p-3 lg:p-6 space-y-4 lg:space-y-6">
 					{#if messages.length === 0}
-						<div class="flex flex-col items-center justify-center h-full text-center text-gray-500">
-							<div class="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center">
-								<svg class="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<div class="flex flex-col items-center justify-center h-full text-center text-gray-500 px-4">
+							<div class="w-16 h-16 lg:w-24 lg:h-24 mx-auto mb-4 lg:mb-6 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center">
+								<svg class="w-8 h-8 lg:w-12 lg:h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
 								</svg>
 							</div>
-							<h2 class="text-2xl font-semibold text-gray-700 mb-2">Welcome to AI Assistant</h2>
-							<p class="text-lg text-gray-500 mb-4">I'm here to help you with any questions or tasks</p>
+							<h2 class="text-lg lg:text-2xl font-semibold text-gray-700 mb-2">Welcome to AI Assistant</h2>
+							<p class="text-base lg:text-lg text-gray-500 mb-3 lg:mb-4">I'm here to help you with any questions or tasks</p>
 							<div class="max-w-md">
-								<p class="text-sm text-gray-400 leading-relaxed">
+								<p class="text-xs lg:text-sm text-gray-400 leading-relaxed">
 									You can ask me about programming, writing, analysis, or just have a friendly conversation. 
 									I'm powered by Google's latest Gemini 2.0 Flash model for the best possible responses.
 								</p>
@@ -389,46 +478,51 @@
 
 					{#each messages as message}
 						<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
-							<div class="max-w-2xl px-6 py-4 rounded-2xl {message.role === 'user' ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-50 text-gray-800 border border-gray-200'}">
+							<div class="max-w-xs sm:max-w-md lg:max-w-2xl px-3 lg:px-6 py-3 lg:py-4 rounded-2xl {message.role === 'user' ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-gray-800 border-2 border-gray-100 shadow-sm hover:shadow-md transition-shadow'}">
 								{#if message.role === 'user'}
-									<div class="flex items-center space-x-3 mb-2">
-										<div class="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-											<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<div class="flex items-center space-x-2 lg:space-x-3 mb-2">
+										<div class="w-6 h-6 lg:w-8 lg:h-8 bg-white/20 rounded-full flex items-center justify-center">
+											<svg class="w-3 h-3 lg:w-4 lg:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
 											</svg>
 										</div>
-										<span class="text-sm font-semibold">You</span>
+										<span class="text-xs lg:text-sm font-semibold text-white">You</span>
 									</div>
-								{:else}
-									<div class="flex items-center space-x-3 mb-2">
-										<div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-											<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
-											</svg>
+									<div class="prose prose-sm max-w-none">
+										<div class="text-sm lg:text-base leading-relaxed whitespace-pre-wrap text-white font-medium">
+											{message.content}
+											{#if isLoading && message.role === 'assistant' && message.content === ''}
+												<span class="inline-block w-2 h-4 bg-white animate-pulse"></span>
+											{/if}
 										</div>
-										<span class="text-sm font-semibold text-blue-600">AI Assistant</span>
 									</div>
-								{/if}
-								<div class="prose prose-sm max-w-none">
-									<p class="text-base leading-relaxed whitespace-pre-wrap">
-										{message.content}
-										{#if isLoading && message.role === 'assistant' && message.content === ''}
-											<span class="inline-block w-2 h-4 bg-blue-500 animate-pulse"></span>
-										{/if}
-									</p>
-								</div>
-								
-								{#if message.role === 'user'}
-									<div class="mt-3 pt-3 border-t border-gray-200">
+									<div class="mt-2 lg:mt-3 pt-2 lg:pt-3 border-t border-white/30">
 										<button
 											on:click={() => forkConversation(message.id)}
-											class="text-xs text-green-600 hover:text-green-700 font-medium flex items-center space-x-1 hover:bg-green-50 px-2 py-1 rounded transition-colors"
+											class="text-xs text-white hover:text-blue-100 font-medium flex items-center space-x-1 hover:bg-white/20 px-1.5 lg:px-2 py-1 rounded transition-colors"
 										>
-											<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<svg class="w-2.5 h-2.5 lg:w-3 lg:h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
 											</svg>
 											<span>Fork from here</span>
 										</button>
+									</div>
+								{:else}
+									<div class="flex items-center space-x-2 lg:space-x-3 mb-2">
+										<div class="w-6 h-6 lg:w-8 lg:h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+											<svg class="w-3 h-3 lg:w-4 lg:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+											</svg>
+										</div>
+										<span class="text-xs lg:text-sm font-semibold text-blue-600">AI Assistant</span>
+									</div>
+									<div class="prose prose-sm max-w-none">
+										<div class="text-sm lg:text-base leading-relaxed whitespace-pre-wrap text-gray-800 font-medium markdown-content">
+											{@html formatMessage(message.content)}
+											{#if isLoading && message.role === 'assistant' && message.content === ''}
+												<span class="inline-block w-2 h-4 bg-blue-500 animate-pulse"></span>
+											{/if}
+										</div>
 									</div>
 								{/if}
 							</div>
@@ -437,21 +531,21 @@
 
 					{#if isLoading && currentStreamingMessage === ''}
 						<div class="flex justify-start">
-							<div class="max-w-2xl px-6 py-4 rounded-2xl bg-gray-50 border border-gray-200">
-								<div class="flex items-center space-x-3 mb-2">
-									<div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-										<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<div class="max-w-xs sm:max-w-md lg:max-w-2xl px-3 lg:px-6 py-3 lg:py-4 rounded-2xl bg-white border-2 border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+								<div class="flex items-center space-x-2 lg:space-x-3 mb-2">
+									<div class="w-6 h-6 lg:w-8 lg:h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+										<svg class="w-3 h-3 lg:w-4 lg:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
 										</svg>
 									</div>
-									<span class="text-sm font-semibold text-blue-600">AI Assistant</span>
+									<span class="text-xs lg:text-sm font-semibold text-blue-600">AI Assistant</span>
 								</div>
 								<div class="flex items-center space-x-2">
-									<span class="text-gray-600">Thinking</span>
+									<span class="text-sm lg:text-base text-gray-700 font-medium">Thinking</span>
 									<div class="flex space-x-1">
-										<div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-										<div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-										<div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+										<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce"></div>
+										<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+										<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
 									</div>
 								</div>
 							</div>
@@ -461,24 +555,24 @@
 			</div>
 
 			<!-- Chat Input -->
-			<div class="bg-white rounded-br-xl shadow-sm border-t border-gray-200 p-6">
-				<form on:submit={handleChatSubmit} class="flex space-x-4">
+			<div class="bg-white rounded-b-xl lg:rounded-br-xl shadow-sm border-t-2 border-gray-100 p-3 lg:p-6 flex-shrink-0">
+				<form on:submit={handleChatSubmit} class="flex space-x-2 lg:space-x-4">
 					<div class="flex-1 relative">
 						<input
 							bind:value={input}
 							type="text"
 							placeholder="Ask me anything... I'm here to help!"
-							class="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all duration-200 resize-none"
+							class="w-full px-3 lg:px-6 py-3 lg:py-4 text-base lg:text-lg border-2 border-gray-200 rounded-xl lg:rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all duration-200 resize-none hover:border-gray-300 focus:shadow-md"
 							disabled={isLoading}
 						/>
 						{#if input.trim()}
 							<button
 								type="button"
 								on:click={() => input = ''}
-								class="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+								class="absolute right-2 lg:right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-gray-100 rounded-full"
 								aria-label="Clear input text"
 							>
-								<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg class="w-4 h-4 lg:w-5 lg:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
 								</svg>
 							</button>
@@ -487,19 +581,19 @@
 					<button
 						type="submit"
 						disabled={!input.trim() || isLoading}
-						class="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-2xl font-semibold hover:from-blue-700 hover:to-purple-700 focus:ring-4 focus:ring-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center space-x-3 shadow-lg"
+						class="px-4 lg:px-8 py-3 lg:py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl lg:rounded-2xl font-semibold hover:from-blue-700 hover:to-purple-700 focus:ring-4 focus:ring-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center space-x-2 lg:space-x-3 shadow-lg hover:shadow-xl text-sm lg:text-base transform hover:scale-105 active:scale-95"
 					>
 						{#if isLoading}
-							<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+							<svg class="w-4 h-4 lg:w-5 lg:h-5 animate-spin" fill="none" viewBox="0 0 24 24">
 								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
 								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 							</svg>
-							<span>Thinking...</span>
+							<span class="hidden sm:inline">Thinking...</span>
 						{:else}
-							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<svg class="w-4 h-4 lg:w-5 lg:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
 							</svg>
-							<span>Send</span>
+							<span class="hidden sm:inline">Send</span>
 						{/if}
 					</button>
 				</form>

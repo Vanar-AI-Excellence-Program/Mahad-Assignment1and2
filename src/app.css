@@ -99,6 +99,159 @@
     @apply px-6 py-3 text-base;
   }
 
+  /* Markdown Content Styles */
+  .markdown-content {
+    @apply text-gray-800 leading-relaxed;
+  }
+
+  .markdown-content h1 {
+    @apply text-2xl font-bold text-gray-900 mt-6 mb-4 pb-2 border-b border-gray-200;
+  }
+
+  .markdown-content h2 {
+    @apply text-xl font-bold text-gray-900 mt-5 mb-3;
+  }
+
+  .markdown-content h3 {
+    @apply text-lg font-bold text-gray-900 mt-4 mb-2;
+  }
+
+  .markdown-content h4 {
+    @apply text-base font-semibold text-gray-900 mt-3 mb-2;
+  }
+
+  .markdown-content h5 {
+    @apply text-sm font-semibold text-gray-900 mt-2 mb-1;
+  }
+
+  .markdown-content h6 {
+    @apply text-xs font-semibold text-gray-900 mt-2 mb-1;
+  }
+
+  .markdown-content p {
+    @apply mb-3 text-gray-700 leading-relaxed;
+  }
+
+  .markdown-content strong {
+    @apply font-bold text-gray-900;
+  }
+
+  .markdown-content em {
+    @apply italic text-gray-800;
+  }
+
+  .markdown-content code {
+    @apply bg-gray-100 px-2 py-1 rounded text-sm text-gray-800 font-mono border border-gray-200;
+  }
+
+  .markdown-content p code {
+    @apply bg-gray-100 px-2 py-1 rounded text-sm text-gray-800 font-mono border border-gray-200;
+  }
+
+  .markdown-content li code {
+    @apply bg-gray-100 px-1.5 py-0.5 rounded text-xs text-gray-800 font-mono border border-gray-200;
+  }
+
+  .markdown-content pre {
+    @apply bg-gray-100 p-3 rounded-lg overflow-x-auto my-3 border border-gray-200;
+  }
+
+  .markdown-content pre code {
+    @apply bg-transparent p-0 border-0;
+  }
+
+  .markdown-content ul {
+    @apply my-3 ml-6 space-y-1;
+  }
+
+  .markdown-content ol {
+    @apply my-3 ml-6 space-y-1;
+  }
+
+  .markdown-content ul li {
+    @apply relative pl-4;
+  }
+
+  .markdown-content ul li::before {
+    @apply absolute left-0 content-['•'] text-gray-600;
+  }
+
+  .markdown-content ol li {
+    @apply list-decimal list-inside;
+  }
+
+  .markdown-content li {
+    @apply text-gray-700 leading-relaxed;
+  }
+
+  .markdown-content li + li {
+    @apply mt-1;
+  }
+
+  /* Additional list improvements */
+  .markdown-content ul li {
+    @apply text-gray-700 leading-relaxed;
+  }
+
+  .markdown-content ol li {
+    @apply text-gray-700 leading-relaxed;
+  }
+
+  .markdown-content blockquote {
+    @apply border-l-4 border-blue-500 pl-4 py-2 my-3 bg-blue-50 rounded-r-lg;
+  }
+
+  .markdown-content blockquote p {
+    @apply text-gray-700 italic mb-0;
+  }
+
+  .markdown-content hr {
+    @apply border-gray-300 my-6;
+  }
+
+  .markdown-content table {
+    @apply w-full border-collapse border border-gray-300 my-4;
+  }
+
+  .markdown-content th {
+    @apply bg-gray-100 border border-gray-300 px-3 py-2 text-left font-semibold text-gray-900;
+  }
+
+  .markdown-content td {
+    @apply border border-gray-300 px-3 py-2 text-gray-700;
+  }
+
+  .markdown-content a {
+    @apply text-blue-600 hover:text-blue-700 underline;
+  }
+
+  .markdown-content img {
+    @apply max-w-full h-auto rounded-lg shadow-sm my-3;
+  }
+
+  /* Additional spacing and visual improvements */
+  .markdown-content > *:first-child {
+    @apply mt-0;
+  }
+
+  .markdown-content > *:last-child {
+    @apply mb-0;
+  }
+
+  .markdown-content h1:first-child,
+  .markdown-content h2:first-child,
+  .markdown-content h3:first-child {
+    @apply mt-0;
+  }
+
+  .markdown-content pre:first-child {
+    @apply mt-0;
+  }
+
+  .markdown-content blockquote:first-child {
+    @apply mt-0;
+  }
+
   .btn-xl {
     @apply px-8 py-4 text-lg;
   }
@@ -282,6 +435,109 @@
     @apply opacity-100 translate-y-0;
   }
 
+  /* Admin Button Specific Styles */
+  .btn-admin {
+    @apply relative overflow-hidden border-2 border-primary-500/20 cursor-pointer;
+  }
+
+  .btn-admin::before {
+    @apply absolute inset-0 bg-gradient-to-r from-primary-400 to-primary-600 opacity-0 transition-opacity duration-300;
+    content: '';
+  }
+
+  .btn-admin:hover::before {
+    @apply opacity-100;
+  }
+
+  .btn-admin:hover {
+    @apply border-primary-500/40;
+  }
+
+  .btn-admin > * {
+    @apply relative z-10;
+  }
+
+  /* Admin Button Icon Animation */
+  .btn-admin svg {
+    @apply transition-transform duration-200;
+  }
+
+  .btn-admin:hover svg {
+    @apply transform scale-110;
+  }
+
+  /* Enhanced Admin Button Effects */
+  .btn-admin:hover {
+    @apply shadow-glow-lg transform scale-105;
+  }
+
+  .btn-admin:active {
+    @apply transform scale-95;
+  }
+
+  .btn-admin:focus {
+    @apply ring-2 ring-primary-400 ring-offset-2;
+  }
+
+  /* Admin Button Pulse Animation */
+  .btn-admin {
+    animation: admin-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes admin-pulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+    }
+    50% {
+      box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+    }
+  }
+
+  .btn-admin:hover {
+    animation: none;
+  }
+
+  /* Admin Button Tooltip Effect */
+  .btn-admin::after {
+    @apply absolute -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 transition-opacity duration-200 pointer-events-none whitespace-nowrap;
+    content: 'Go to Admin Dashboard';
+  }
+
+  .btn-admin:hover::after {
+    @apply opacity-100;
+  }
+
+  /* Responsive Admin Button */
+  @media (max-width: 768px) {
+    .btn-admin {
+      @apply text-sm px-3 py-2;
+    }
+    
+    .btn-admin::after {
+      @apply text-xs -bottom-6;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .btn-admin {
+      @apply text-xs px-2.5 py-1.5;
+    }
+    
+    .btn-admin::after {
+      @apply text-xs -bottom-5 px-1 py-0.5;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .btn-admin {
+      @apply text-xs px-2 py-1;
+    }
+    
+    .btn-admin::after {
+      @apply hidden;
+    }
+  }
+
   /* Enhanced Focus States */
   .focus-ring {
     @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
@@ -332,6 +588,68 @@
   @media (prefers-reduced-motion: reduce) {
     .animate-on-scroll {
       @apply transition-none;
+    }
+  }
+
+  /* Chatbot Layout Specific Styles */
+  .chatbot-container {
+    @apply min-h-screen bg-gray-50;
+  }
+
+  .chatbot-layout {
+    @apply max-w-7xl mx-auto flex flex-col lg:flex-row;
+    height: calc(100vh - 6rem);
+  }
+
+  @media (min-width: 640px) {
+    .chatbot-layout {
+      height: calc(100vh - 8rem);
+    }
+  }
+
+  .chatbot-sidebar {
+    @apply w-full lg:w-80 bg-white rounded-t-xl lg:rounded-l-xl lg:rounded-t-none shadow-sm border-b lg:border-r lg:border-b-0 border-gray-200 flex flex-col flex-shrink-0;
+  }
+
+  .chatbot-main {
+    @apply flex-1 flex flex-col min-h-0;
+  }
+
+  .chatbot-header {
+    @apply bg-white rounded-b-xl lg:rounded-r-xl lg:rounded-b-none shadow-sm border-b lg:border-b-0 border-gray-200 flex-shrink-0;
+  }
+
+  .chatbot-messages {
+    @apply flex-1 bg-white overflow-hidden min-h-0;
+  }
+
+  .chatbot-input {
+    @apply bg-white rounded-b-xl lg:rounded-br-xl shadow-sm border-t border-gray-200 flex-shrink-0;
+  }
+
+  /* Ensure chat input is always visible */
+  .chatbot-input-container {
+    @apply sticky bottom-0 z-10;
+  }
+
+  /* Mobile-first responsive adjustments */
+  @media (max-width: 1024px) {
+    .chatbot-sidebar {
+      @apply max-h-64;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .chatbot-layout {
+      @apply p-2;
+    }
+    
+    .chatbot-header {
+      @apply px-3 py-2;
+    }
+    
+    .chatbot-input {
+      @apply px-3 py-3;
     }
   }
 }
