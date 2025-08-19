@@ -71,9 +71,9 @@
   }
 </script>
 
-<div class="card">
+<div class="form-card">
   {#if isSuccess}
-    <div class="text-center py-8">
+    <div class="card-body text-center py-8">
       <div class="bg-green-100 text-green-800 p-4 rounded-full inline-flex items-center justify-center h-16 w-16 mx-auto mb-4">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
@@ -91,51 +91,58 @@
       </div>
     </div>
   {:else}
-    <form on:submit|preventDefault={handleSubmit} class="space-y-6">
-      <div>
-        <label for="email" class="form-label">Email address</label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autocomplete="email"
-          required
-          bind:value={formData.email}
-          on:input={() => handleInput('email')}
-          class="input-field {formErrors.email ? 'border-red-500' : ''}"
-          placeholder="Enter your email"
-        />
-        {#if formErrors.email}
-          <p class="mt-1 text-sm text-red-600">{formErrors.email}</p>
-        {/if}
-      </div>
-      
-      {#if $error}
-        <div class="bg-red-50 border border-red-200 rounded-lg p-3">
-          <p class="text-sm text-red-600">{$error}</p>
+    <div class="card-body">
+      <form on:submit|preventDefault={handleSubmit} class="space-y-6">
+        <div class="form-group">
+          <label for="email" class="form-label">Email address</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            required
+            bind:value={formData.email}
+            on:input={() => handleInput('email')}
+            class="form-input {formErrors.email ? 'error' : ''}"
+            placeholder="Enter your email"
+          />
+          {#if formErrors.email}
+            <p class="form-error">{formErrors.email}</p>
+          {/if}
         </div>
-      {/if}
-      
-      <button
-        type="submit"
-        disabled={isLoading}
-        class="btn-primary w-full {isLoading ? 'opacity-50 cursor-not-allowed' : ''}"
-      >
-        {#if isLoading}
-          <div class="flex items-center justify-center">
-            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-            Sending...
+        
+        {#if $error}
+          <div class="alert-error">
+            <p class="text-sm">{$error}</p>
           </div>
-        {:else}
-          Reset Password
         {/if}
-      </button>
-      
-      <div class="text-center">
-        <a href="/auth/login" class="text-sm text-primary-600 hover:text-primary-500">
-          Back to Login
-        </a>
-      </div>
-    </form>
+        
+        <button
+          type="submit"
+          disabled={isLoading}
+          class="btn-primary w-full {isLoading ? 'opacity-50 cursor-not-allowed' : ''}"
+        >
+          {#if isLoading}
+            <div class="flex items-center justify-center">
+              <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+              Sending...
+            </div>
+          {:else}
+            Reset Password
+          {/if}
+        </button>
+        
+        <div class="text-center space-y-2">
+          <a href="/auth/login" class="text-sm text-primary-600 hover:text-primary-500">
+            Back to Login
+          </a>
+          <div>
+            <a href="/" class="text-sm text-primary-600 hover:text-primary-500 flex items-center justify-center">
+              ← Back to home
+            </a>
+          </div>
+        </div>
+      </form>
+    </div>
   {/if}
 </div>
