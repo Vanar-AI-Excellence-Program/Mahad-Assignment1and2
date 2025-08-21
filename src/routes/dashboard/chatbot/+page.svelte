@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import type { ChatTreeNode } from '$lib/utils/chat-tree';
 	import { getActiveBranch, createForkFromMessage } from '$lib/utils/chat-tree';
+	import MessageRenderer from './MessageRenderer.svelte';
 
 	let messages: any[] = [];
 	let chatHistory: ChatTreeNode[] = [];
@@ -232,95 +233,6 @@
 		} finally {
 			isLoading = false;
 		}
-	}
-
-	// Format message content with markdown-like formatting
-	function formatMessage(content: string): string {
-		if (!content) return '';
-		
-		let formatted = content;
-		
-		// Headers (must be at start of line)
-		formatted = formatted
-			.replace(/^### (.*$)/gim, '<h3>$1</h3>')
-			.replace(/^## (.*$)/gim, '<h2>$1</h2>')
-			.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-		
-		// Code blocks (must be before other formatting)
-		formatted = formatted
-			.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-		
-		// Inline code
-		formatted = formatted
-			.replace(/`([^`\n]+)`/g, '<code>$1</code>');
-		
-		// Bold text
-		formatted = formatted
-			.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-			.replace(/__(.*?)__/g, '<strong>$1</strong>');
-		
-		// Italic text
-		formatted = formatted
-			.replace(/\*(.*?)\*/g, '<em>$1</em>')
-			.replace(/_(.*?)_/g, '<em>$1</em>');
-		
-		// Process lists - convert to li elements first
-		formatted = formatted
-			.replace(/^(\s*)[*\-] (.*$)/gim, function(match, spaces, content) {
-				const indent = spaces.length;
-				return `<li style="margin-left: ${indent * 1.5}rem">${content}</li>`;
-			})
-			.replace(/^(\s*)(\d+)\. (.*$)/gim, function(match, spaces, number, content) {
-				const indent = spaces.length;
-				return `<li style="margin-left: ${indent * 1.5}rem">${content}</li>`;
-			});
-		
-		// Blockquotes
-		formatted = formatted
-			.replace(/^> (.*$)/gim, '<blockquote><p>$1</p></blockquote>');
-		
-		// Horizontal rules
-		formatted = formatted
-			.replace(/^---$/gim, '<hr>')
-			.replace(/^\*\*\*$/gim, '<hr>');
-		
-		// Links
-		formatted = formatted
-			.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-		
-		// Line breaks and paragraphs
-		formatted = formatted
-			.replace(/\n\n/g, '</p><p>')
-			.replace(/\n/g, '<br>');
-		
-		// Wrap in paragraph tags
-		formatted = formatted
-			.replace(/^(.*)$/gm, '<p>$1</p>');
-		
-		// Clean up empty paragraphs and fix list formatting
-		formatted = formatted
-			.replace(/<p><\/p>/g, '')
-			.replace(/<p><br><\/p>/g, '')
-			.replace(/<p><li>/g, '<li>')
-			.replace(/<\/li><\/p>/g, '</li>')
-			.replace(/<p><h1>/g, '<h1>')
-			.replace(/<\/h1><\/p>/g, '</h1>')
-			.replace(/<p><h2>/g, '<h2>')
-			.replace(/<\/h2><\/p>/g, '</h2>')
-			.replace(/<p><h3>/g, '<h3>')
-			.replace(/<\/h3><\/p>/g, '</h3>')
-			.replace(/<p><pre>/g, '<pre>')
-			.replace(/<\/pre><\/p>/g, '</pre>')
-			.replace(/<p><blockquote>/g, '<blockquote>')
-			.replace(/<\/blockquote><\/p>/g, '</blockquote>')
-			.replace(/<p><hr><\/p>/g, '<hr>');
-		
-		// Final cleanup
-		formatted = formatted
-			.replace(/^<p>/, '')
-			.replace(/<\/p>$/, '');
-		
-		return formatted;
 	}
 
 	async function handleChatSubmit(event: Event) {
@@ -775,22 +687,11 @@
 											{message.isError ? 'Error' : 'AI Assistant'}
 										</span>
 									</div>
-									<div class="prose prose-sm max-w-none">
-										<div class="text-sm lg:text-base leading-relaxed whitespace-pre-wrap {message.isError ? 'text-red-700' : 'text-gray-800'} font-medium markdown-content">
-											{#if message.isLoading}
-												<div class="flex items-center space-x-2">
-													<span>Regenerating response...</span>
-													<div class="flex space-x-1">
-														<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce"></div>
-														<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-														<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-													</div>
-												</div>
-											{:else}
-												{@html formatMessage(message.content)}
-											{/if}
-										</div>
-									</div>
+									<MessageRenderer 
+										content={message.content} 
+										isLoading={message.isLoading} 
+										isError={message.isError} 
+									/>
 								{/if}
 							</div>
 						</div>
