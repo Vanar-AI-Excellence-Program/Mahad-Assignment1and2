@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { ChatTreeNode } from '$lib/utils/chat-tree';
+	import { getActiveBranch, createForkFromMessage } from '$lib/utils/chat-tree';
 
 	let messages: any[] = [];
 	let chatHistory: ChatTreeNode[] = [];
@@ -9,6 +10,8 @@
 	let currentStreamingMessage = '';
 	let selectedConversationId: string | null = null;
 	let showHistory = true;
+	let editingMessageId: string | null = null;
+	let editingContent = '';
 
 	// Load chat history from database
 	async function loadChatHistory() {
@@ -30,6 +33,8 @@
 		messages = [];
 		selectedConversationId = null;
 		showHistory = false;
+		editingMessageId = null;
+		editingContent = '';
 	}
 
 	// Load a specific conversation
@@ -38,6 +43,8 @@
 		messages = flatMessages;
 		selectedConversationId = conversation.id;
 		showHistory = false;
+		editingMessageId = null;
+		editingContent = '';
 	}
 
 	// Flatten a conversation tree to linear array
@@ -49,7 +56,9 @@
 				id: node.id,
 				role: node.role,
 				content: node.content,
-				createdAt: node.createdAt
+				createdAt: node.createdAt,
+				isEdited: node.isEdited,
+				originalContent: node.originalContent
 			});
 			
 			if (node.children && node.children.length > 0) {
@@ -69,44 +78,100 @@
 			messages = messagesUpToFork;
 			selectedConversationId = messageId;
 			showHistory = false;
+			editingMessageId = null;
+			editingContent = '';
 		}
 	}
 
-	// Find conversation containing a specific message
-	function findConversationByMessageId(conversations: ChatTreeNode[], messageId: string): ChatTreeNode | null {
-		for (const conv of conversations) {
-			if (conv.id === messageId) return conv;
-			if (conv.children) {
-				for (const child of conv.children) {
-					if (child.id === messageId) return conv;
-				}
-			}
+	// Start editing a user message
+	function startEditing(message: any) {
+		if (message.role === 'user') {
+			editingMessageId = message.id;
+			editingContent = message.content;
 		}
-		return null;
 	}
 
-	// Get messages up to a specific fork point
-	function getMessagesUpToFork(conversation: ChatTreeNode, forkMessageId: string): any[] {
-		const result: any[] = [];
-		
-		function traverse(node: ChatTreeNode, includeThis: boolean = false) {
-			if (includeThis || node.id === forkMessageId) {
-				result.push({
-					id: node.id,
-					role: node.role,
-					content: node.content,
-					createdAt: node.createdAt
-				});
-				includeThis = true;
-			}
+	// Cancel editing
+	function cancelEditing() {
+		editingMessageId = null;
+		editingContent = '';
+	}
+
+	// Save edited message
+	async function saveEditedMessage(message: any) {
+		if (!editingContent.trim() || editingContent === message.content) {
+			cancelEditing();
+			return;
+		}
+
+		try {
+			isLoading = true;
 			
-			if (node.children && node.children.length > 0) {
-				node.children.forEach(child => traverse(child, includeThis));
+			// Call the edit API
+			const response = await fetch('/api/chat', {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					messageId: message.id,
+					newContent: editingContent
+				})
+			});
+
+			if (response.ok) {
+				// Handle streaming response
+				const reader = response.body?.getReader();
+				if (reader) {
+					const decoder = new TextDecoder();
+					let fullContent = '';
+					
+					while (true) {
+						const { done, value } = await reader.read();
+						if (done) break;
+						
+						const chunk = decoder.decode(value);
+						const lines = chunk.split('\n');
+						
+						for (const line of lines) {
+							if (line.startsWith('data: ')) {
+								const data = line.slice(6);
+								
+								if (data === '[DONE]') {
+									// Reload chat history to show the new branch
+									await loadChatHistory();
+									
+									// Update the current conversation to show the new branch
+									const updatedConversation = findConversationByMessageId(chatHistory, selectedConversationId!);
+									if (updatedConversation) {
+										loadConversation(updatedConversation);
+									}
+									
+									cancelEditing();
+									break;
+								}
+								
+								try {
+									const parsed = JSON.parse(data);
+									if (parsed.chunk) {
+										fullContent += parsed.chunk;
+									}
+								} catch (e) {
+									console.error('Error parsing chunk:', e);
+								}
+							}
+						}
+					}
+				}
+			} else {
+				const error = await response.text();
+				console.error('Failed to edit message:', error);
+				alert('Failed to edit message. Please try again.');
 			}
+		} catch (error) {
+			console.error('Error editing message:', error);
+			alert('Error editing message. Please try again.');
+		} finally {
+			isLoading = false;
 		}
-		
-		traverse(conversation);
-		return result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 	}
 
 	// Format message content with markdown-like formatting
@@ -292,6 +357,45 @@
 			}
 		}, 100);
 	}
+
+	// Find conversation containing a specific message
+	function findConversationByMessageId(conversations: ChatTreeNode[], messageId: string): ChatTreeNode | null {
+		for (const conv of conversations) {
+			if (conv.id === messageId) return conv;
+			if (conv.children) {
+				for (const child of conv.children) {
+					if (child.id === messageId) return conv;
+				}
+			}
+		}
+		return null;
+	}
+
+	// Get messages up to a specific fork point
+	function getMessagesUpToFork(conversation: ChatTreeNode, forkMessageId: string): any[] {
+		const result: any[] = [];
+		
+		function traverse(node: ChatTreeNode, includeThis: boolean = false) {
+			if (includeThis || node.id === forkMessageId) {
+				result.push({
+					id: node.id,
+					role: node.role,
+					content: node.content,
+					createdAt: node.createdAt,
+					isEdited: node.isEdited,
+					originalContent: node.originalContent
+				});
+				includeThis = true;
+			}
+			
+			if (node.children && node.children.length > 0) {
+				node.children.forEach(child => traverse(child, includeThis));
+			}
+		}
+		
+		traverse(conversation);
+		return result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+	}
 </script>
 
 <svelte:head>
@@ -337,13 +441,18 @@
 									<div class="flex items-start space-x-2 lg:space-x-3">
 										<div class="w-6 h-6 lg:w-8 lg:h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
 											<svg class="w-3 h-3 lg:w-4 lg:h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
 											</svg>
 										</div>
 										<div class="flex-1 min-w-0">
-											<p class="text-xs lg:text-sm font-medium text-gray-900 truncate">
-												{conversation.content.substring(0, 40)}...
-											</p>
+											<div class="flex items-center space-x-2 mb-1">
+												<p class="text-xs lg:text-sm font-medium text-gray-900 truncate">
+													{conversation.content.substring(0, 40)}...
+												</p>
+												{#if conversation.isEdited}
+													<span class="text-xs text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full">Edited</span>
+												{/if}
+											</div>
 											<p class="text-xs text-gray-500">
 												{new Date(conversation.createdAt).toLocaleDateString()}
 											</p>
@@ -378,9 +487,14 @@
 															</svg>
 														</div>
 														<div class="flex-1 min-w-0">
-															<p class="text-xs lg:text-sm text-gray-700 truncate">
-																{child.content.substring(0, 30)}...
-															</p>
+															<div class="flex items-center space-x-2 mb-1">
+																<p class="text-xs lg:text-sm text-gray-700 truncate">
+																	{child.content.substring(0, 30)}...
+																</p>
+																{#if child.isEdited}
+																	<span class="text-xs text-purple-600 bg-purple-100 px-1 py-0.5 rounded-full">Edited</span>
+																{/if}
+															</div>
 															<p class="text-xs text-gray-500">
 																{new Date(child.createdAt).toLocaleDateString()}
 															</p>
@@ -399,6 +513,36 @@
 														<span>Fork</span>
 													</div>
 												</button>
+												
+												<!-- Show nested children (edited versions) -->
+												{#if child.children && child.children.length > 0}
+													<div class="ml-2 lg:ml-4 space-y-1">
+														{#each child.children as grandchild}
+															{#if grandchild.role === 'user'}
+																<button
+																	on:click={() => loadConversation(grandchild)}
+																	class="w-full text-left p-1 rounded hover:bg-orange-50 transition-all duration-200 border border-gray-100 hover:border-orange-200 hover:shadow-sm text-xs"
+																>
+																	<div class="flex items-start space-x-1">
+																		<div class="w-3 h-3 lg:w-4 lg:h-4 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
+																			<svg class="w-1.5 h-1.5 lg:w-2 lg:h-2 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+																			</svg>
+																		</div>
+																		<div class="flex-1 min-w-0">
+																			<p class="text-xs text-gray-600 truncate">
+																				{grandchild.content.substring(0, 25)}...
+																			</p>
+																			<p class="text-xs text-gray-400">
+																				{new Date(grandchild.createdAt).toLocaleDateString()}
+																			</p>
+																		</div>
+																	</div>
+																</button>
+															{/if}
+														{/each}
+													</div>
+												{/if}
 											</div>
 										{/each}
 									</div>
@@ -487,26 +631,76 @@
 											</svg>
 										</div>
 										<span class="text-xs lg:text-sm font-semibold text-white">You</span>
+										{#if message.isEdited}
+											<span class="text-xs text-white/70 bg-white/20 px-2 py-1 rounded-full">Edited</span>
+										{/if}
 									</div>
-									<div class="prose prose-sm max-w-none">
-										<div class="text-sm lg:text-base leading-relaxed whitespace-pre-wrap text-white font-medium">
-											{message.content}
-											{#if isLoading && message.role === 'assistant' && message.content === ''}
-												<span class="inline-block w-2 h-4 bg-white animate-pulse"></span>
-											{/if}
+									
+									{#if editingMessageId === message.id}
+										<!-- Edit Mode -->
+										<div class="space-y-3">
+											<textarea
+												bind:value={editingContent}
+												class="w-full px-3 py-2 text-gray-800 rounded-lg border-2 border-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none"
+												rows="3"
+												placeholder="Edit your message..."
+											></textarea>
+											<div class="flex space-x-2">
+												<button
+													on:click={() => saveEditedMessage(message)}
+													disabled={isLoading}
+													class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded-lg transition-colors disabled:opacity-50"
+												>
+													{#if isLoading}
+														<svg class="w-3 h-3 animate-spin inline mr-1" fill="none" viewBox="0 0 24 24">
+															<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+															<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+														</svg>
+													{/if}
+													Save
+												</button>
+												<button
+													on:click={cancelEditing}
+													disabled={isLoading}
+													class="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-lg transition-colors disabled:opacity-50"
+												>
+													Cancel
+												</button>
+											</div>
 										</div>
-									</div>
-									<div class="mt-2 lg:mt-3 pt-2 lg:pt-3 border-t border-white/30">
-										<button
-											on:click={() => forkConversation(message.id)}
-											class="text-xs text-white hover:text-blue-100 font-medium flex items-center space-x-1 hover:bg-white/20 px-1.5 lg:px-2 py-1 rounded transition-colors"
-										>
-											<svg class="w-2.5 h-2.5 lg:w-3 lg:h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
-											</svg>
-											<span>Fork from here</span>
-										</button>
-									</div>
+									{:else}
+										<!-- Display Mode -->
+										<div class="prose prose-sm max-w-none">
+											<div class="text-sm lg:text-base leading-relaxed whitespace-pre-wrap text-white font-medium">
+												{message.content}
+												{#if isLoading && message.role === 'assistant' && message.content === ''}
+													<span class="inline-block w-2 h-4 bg-white animate-pulse"></span>
+												{/if}
+											</div>
+										</div>
+										
+										<div class="mt-2 lg:mt-3 pt-2 lg:pt-3 border-t border-white/30 flex items-center justify-between">
+											<button
+												on:click={() => startEditing(message)}
+												class="text-xs text-white hover:text-blue-100 font-medium flex items-center space-x-1 hover:bg-white/20 px-1.5 lg:px-2 py-1 rounded transition-colors"
+											>
+												<svg class="w-2.5 h-2.5 lg:w-3 lg:h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+												</svg>
+												<span>Edit</span>
+											</button>
+											
+											<button
+												on:click={() => forkConversation(message.id)}
+												class="text-xs text-white hover:text-blue-100 font-medium flex items-center space-x-1 hover:bg-white/20 px-1.5 lg:px-2 py-1 rounded transition-colors"
+											>
+												<svg class="w-2.5 h-2.5 lg:w-3 lg:h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
+												</svg>
+												<span>Fork from here</span>
+											</button>
+										</div>
+									{/if}
 								{:else}
 									<div class="flex items-center space-x-2 lg:space-x-3 mb-2">
 										<div class="w-6 h-6 lg:w-8 lg:h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">

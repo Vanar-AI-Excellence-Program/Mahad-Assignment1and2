@@ -50,6 +50,8 @@ export const chats = pgTable('chats', {
   parentId: uuid('parent_id').references(() => chats.id, { onDelete: 'cascade' }),
   role: text('role', { enum: ['user', 'assistant'] }).notNull(),
   content: text('content').notNull(),
+  isEdited: boolean('is_edited').default(false),
+  originalContent: text('original_content'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 

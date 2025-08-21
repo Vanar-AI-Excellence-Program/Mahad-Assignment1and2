@@ -2,6 +2,8 @@ import type { Chat } from '$lib/db/schema';
 
 export interface ChatTreeNode extends Chat {
   children: ChatTreeNode[];
+  isEdited?: boolean;
+  originalContent?: string;
 }
 
 /**
@@ -105,6 +107,8 @@ export function flattenChatTree(tree: ChatTreeNode[]): Chat[] {
         parentId: node.parentId,
         role: node.role,
         content: node.content,
+        isEdited: node.isEdited,
+        originalContent: node.originalContent,
         createdAt: node.createdAt
       });
       
@@ -116,4 +120,132 @@ export function flattenChatTree(tree: ChatTreeNode[]): Chat[] {
   
   traverse(tree);
   return result;
+}
+
+/**
+ * Gets the active branch of a conversation (latest edited version)
+ * @param tree - Tree-structured chat history
+ * @returns Array of messages representing the active branch
+ */
+export function getActiveBranch(tree: ChatTreeNode[]): Chat[] {
+  const result: Chat[] = [];
+  
+  function traverse(nodes: ChatTreeNode[]): void {
+    nodes.forEach(node => {
+      // For user messages, check if there are edited versions
+      if (node.role === 'user' && node.children && node.children.length > 0) {
+        // Find the latest edited version (most recent child)
+        const editedVersions = node.children.filter(child => child.role === 'user');
+        if (editedVersions.length > 0) {
+          // Use the most recent edited version
+          const latestEdit = editedVersions.sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          )[0];
+          
+          result.push({
+            id: latestEdit.id,
+            userId: latestEdit.userId,
+            parentId: latestEdit.parentId,
+            role: latestEdit.role,
+            content: latestEdit.content,
+            isEdited: latestEdit.isEdited,
+            originalContent: latestEdit.originalContent,
+            createdAt: latestEdit.createdAt
+          });
+          
+          // Continue with children of the edited version
+          if (latestEdit.children && latestEdit.children.length > 0) {
+            traverse(latestEdit.children);
+          }
+        } else {
+          // No edited version, use original
+          result.push({
+            id: node.id,
+            userId: node.userId,
+            parentId: node.parentId,
+            role: node.role,
+            content: node.content,
+            isEdited: node.isEdited,
+            originalContent: node.originalContent,
+            createdAt: node.createdAt
+          });
+          
+          // Continue with original children
+          if (node.children && node.children.length > 0) {
+            traverse(node.children);
+          }
+        }
+      } else {
+        // For AI messages or user messages without edits, add as is
+        result.push({
+          id: node.id,
+          userId: node.userId,
+          parentId: node.parentId,
+          role: node.role,
+          content: node.content,
+          isEdited: node.isEdited,
+          originalContent: node.originalContent,
+          createdAt: node.createdAt
+        });
+        
+        // Continue with children
+        if (node.children && node.children.length > 0) {
+          traverse(node.children);
+        }
+      }
+    });
+  }
+  
+  traverse(tree);
+  return result;
+}
+
+/**
+ * Creates a fork from a specific message in the conversation
+ * @param tree - Tree-structured chat history
+ * @param messageId - ID of the message to fork from
+ * @returns Array of messages up to the fork point
+ */
+export function createForkFromMessage(tree: ChatTreeNode[], messageId: string): Chat[] {
+  const result: Chat[] = [];
+  
+  function findAndCollect(node: ChatTreeNode, targetId: string, collecting: boolean = false): boolean {
+    if (node.id === targetId) {
+      collecting = true;
+    }
+    
+    if (collecting) {
+      result.push({
+        id: node.id,
+        userId: node.userId,
+        parentId: node.parentId,
+        role: node.role,
+        content: node.content,
+        isEdited: node.isEdited,
+        originalContent: node.originalContent,
+        createdAt: node.createdAt
+      });
+    }
+    
+    // Search children
+    if (node.children && node.children.length > 0) {
+      for (const child of node.children) {
+        if (findAndCollect(child, targetId, collecting)) {
+          return true;
+        }
+      }
+    }
+    
+    return collecting;
+  }
+  
+  // Search through all root conversations
+  for (const root of tree) {
+    if (findAndCollect(root, messageId)) {
+      break;
+    }
+  }
+  
+  // Sort chronologically
+  return result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
