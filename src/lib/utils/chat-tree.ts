@@ -249,3 +249,88 @@ export function createForkFromMessage(tree: ChatTreeNode[], messageId: string): 
   // Sort chronologically
   return result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
+
+/**
+ * Gets messages up to a specific point in a conversation branch
+ * Useful for editing operations where we need context up to a certain message
+ * @param tree - Tree-structured chat history
+ * @param messageId - ID of the message to get context up to
+ * @param includeTarget - Whether to include the target message in the result
+ * @returns Array of messages up to the specified point
+ */
+export function getMessagesUpToPoint(tree: ChatTreeNode[], messageId: string, includeTarget: boolean = true): Chat[] {
+  const result: Chat[] = [];
+  
+  function findAndCollect(node: ChatTreeNode, targetId: string, collecting: boolean = false): boolean {
+    if (node.id === targetId) {
+      if (includeTarget) {
+        collecting = true;
+      }
+      return true; // Found the target
+    }
+    
+    if (collecting) {
+      result.push({
+        id: node.id,
+        userId: node.userId,
+        parentId: node.parentId,
+        role: node.role,
+        content: node.content,
+        isEdited: node.isEdited,
+        originalContent: node.originalContent,
+        createdAt: node.createdAt
+      });
+    }
+    
+    // Search children
+    if (node.children && node.children.length > 0) {
+      for (const child of node.children) {
+        if (findAndCollect(child, targetId, collecting)) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  // Search through all root conversations
+  for (const root of tree) {
+    if (findAndCollect(root, messageId)) {
+      break;
+    }
+  }
+  
+  // Sort chronologically
+  return result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
+/**
+ * Removes messages from a specific point downward in a conversation
+ * Useful for editing operations where old responses need to be removed
+ * @param messages - Array of messages to filter
+ * @param fromMessageId - ID of the message to start removing from (exclusive)
+ * @returns Filtered array with messages removed from the specified point
+ */
+export function removeMessagesFromPoint(messages: Chat[], fromMessageId: string): Chat[] {
+  const messageMap = new Map<string, Chat>();
+  const descendants = new Set<string>();
+  
+  // Build lookup map
+  messages.forEach(msg => messageMap.set(msg.id, msg));
+  
+  // Find all descendant message IDs
+  function collectDescendants(parentId: string): void {
+    messages.forEach(msg => {
+      if (msg.parentId === parentId) {
+        descendants.add(msg.id);
+        collectDescendants(msg.id);
+      }
+    });
+  }
+  
+  collectDescendants(fromMessageId);
+  
+  // Filter out descendants and the target message
+  return messages.filter(msg => msg.id !== fromMessageId && !descendants.has(msg.id));
+}

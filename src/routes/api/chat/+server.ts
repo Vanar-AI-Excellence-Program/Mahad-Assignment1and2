@@ -3,7 +3,7 @@ import { streamText } from 'ai';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { sessions, chats } from '$lib/db/schema';
-import { eq, and, gt, desc } from 'drizzle-orm';
+import { eq, and, gt, desc, inArray } from 'drizzle-orm';
 import { config } from '$lib/config/env';
 import { buildChatTree } from '$lib/utils/chat-tree';
 
@@ -237,25 +237,20 @@ export const PUT: RequestHandler = async ({ request, cookies }) => {
 			return new Response('Message not found or not editable', { status: 404 });
 		}
 
-		// Get all messages in the current branch up to this message
-		const branchMessages = await getBranchMessagesUpTo(messageId, session.user.id);
+		// Get all messages in the current branch up to this message (excluding the message being edited)
+		const branchMessages = await getBranchMessagesUpTo(messageId, session.user.id, false);
 		
-		// Mark the original message as edited and save original content
+		// Delete all child nodes (AI responses and subsequent messages) under the edited message
+		await deleteBranchFromMessage(messageId, session.user.id);
+		
+		// Update the original message with new content
 		await db.update(chats)
 			.set({
+				content: newContent,
 				isEdited: true,
 				originalContent: messageToEdit.content
 			})
 			.where(eq(chats.id, messageId));
-
-		// Create a new edited message as a child of the original
-		const editedMessage = await db.insert(chats).values({
-			userId: session.user.id,
-			parentId: messageId,
-			role: 'user',
-			content: newContent,
-			isEdited: false
-		}).returning();
 
 		// Create a ReadableStream for streaming the regenerated response
 		const stream = new ReadableStream({
@@ -287,11 +282,11 @@ export const PUT: RequestHandler = async ({ request, cookies }) => {
 						controller.enqueue(data);
 					}
 
-					// Save the new AI response
+					// Save the new AI response as a child of the edited message
 					if (fullContent.trim()) {
 						await db.insert(chats).values({
 							userId: session.user.id,
-							parentId: editedMessage[0].id,
+							parentId: messageId,
 							role: 'assistant',
 							content: fullContent
 						});
@@ -329,7 +324,7 @@ export const PUT: RequestHandler = async ({ request, cookies }) => {
 };
 
 // Helper function to get all messages in a branch up to a specific message
-async function getBranchMessagesUpTo(messageId: string, userId: string): Promise<any[]> {
+async function getBranchMessagesUpTo(messageId: string, userId: string, includeTarget: boolean = true): Promise<any[]> {
 	const messages: any[] = [];
 	const messageMap = new Map<string, any>();
 	
@@ -345,14 +340,48 @@ async function getBranchMessagesUpTo(messageId: string, userId: string): Promise
 	// Find the target message and collect all ancestors
 	let currentMessage = messageMap.get(messageId);
 	while (currentMessage && currentMessage.parentId) {
-		messages.unshift(currentMessage);
+		if (includeTarget || currentMessage.id !== messageId) {
+			messages.unshift(currentMessage);
+		}
 		currentMessage = messageMap.get(currentMessage.parentId);
 	}
 	
-	// Add the root message if it exists
-	if (currentMessage) {
+	// Add the root message if it exists and we should include it
+	if (currentMessage && (includeTarget || currentMessage.id !== messageId)) {
 		messages.unshift(currentMessage);
 	}
 
 	return messages;
+}
+
+// Helper function to delete all child nodes under a specific message
+async function deleteBranchFromMessage(messageId: string, userId: string): Promise<void> {
+	// Get all messages that are descendants of the edited message
+	const allMessages = await db.query.chats.findMany({
+		where: eq(chats.userId, userId),
+		orderBy: chats.createdAt,
+	});
+
+	// Find all descendant message IDs
+	const descendantIds = new Set<string>();
+	
+	function collectDescendants(parentId: string): void {
+		allMessages.forEach(msg => {
+			if (msg.parentId === parentId) {
+				descendantIds.add(msg.id);
+				collectDescendants(msg.id);
+			}
+		});
+	}
+	
+	collectDescendants(messageId);
+	
+	// Delete all descendant messages
+	if (descendantIds.size > 0) {
+		const descendantIdsArray = Array.from(descendantIds);
+		await db.delete(chats)
+			.where(inArray(chats.id, descendantIdsArray));
+		
+		console.log(`Deleted ${descendantIds.size} descendant messages under message ${messageId}`);
+	}
 }

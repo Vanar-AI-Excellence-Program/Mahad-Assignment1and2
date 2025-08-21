@@ -107,6 +107,31 @@
 		try {
 			isLoading = true;
 			
+			// Find the index of the message being edited
+			const messageIndex = messages.findIndex(m => m.id === message.id);
+			if (messageIndex === -1) {
+				console.error('Message not found in current conversation');
+				return;
+			}
+			
+			// Remove all messages after the edited message (AI responses and subsequent messages)
+			messages = messages.slice(0, messageIndex + 1);
+			
+			// Update the edited message content in the UI immediately
+			messages[messageIndex] = {
+				...messages[messageIndex],
+				content: editingContent,
+				isEdited: true
+			};
+			
+			// Add a temporary loading message for the AI response
+			messages = [...messages, { 
+				id: 'temp-ai-' + Date.now(),
+				role: 'assistant', 
+				content: '',
+				isLoading: true 
+			}];
+			
 			// Call the edit API
 			const response = await fetch('/api/chat', {
 				method: 'PUT',
@@ -123,6 +148,7 @@
 				if (reader) {
 					const decoder = new TextDecoder();
 					let fullContent = '';
+					const tempMessageIndex = messages.length - 1;
 					
 					while (true) {
 						const { done, value } = await reader.read();
@@ -136,7 +162,15 @@
 								const data = line.slice(6);
 								
 								if (data === '[DONE]') {
-									// Reload chat history to show the new branch
+									// Update the temporary message with the final content
+									messages[tempMessageIndex] = {
+										...messages[tempMessageIndex],
+										content: fullContent,
+										isLoading: false
+									};
+									messages = [...messages];
+									
+									// Reload chat history to show the updated structure
 									await loadChatHistory();
 									
 									// Update the current conversation to show the new branch
@@ -153,6 +187,12 @@
 									const parsed = JSON.parse(data);
 									if (parsed.chunk) {
 										fullContent += parsed.chunk;
+										// Update the temporary message with streaming content
+										messages[tempMessageIndex] = {
+											...messages[tempMessageIndex],
+											content: fullContent
+										};
+										messages = [...messages];
 									}
 								} catch (e) {
 									console.error('Error parsing chunk:', e);
@@ -164,10 +204,30 @@
 			} else {
 				const error = await response.text();
 				console.error('Failed to edit message:', error);
+				
+				// Remove the temporary loading message and show error
+				messages = messages.slice(0, -1);
+				messages = [...messages, { 
+					id: 'error-' + Date.now(),
+					role: 'assistant', 
+					content: 'Sorry, I encountered an error while regenerating the response. Please try again.',
+					isError: true
+				}];
+				
 				alert('Failed to edit message. Please try again.');
 			}
 		} catch (error) {
 			console.error('Error editing message:', error);
+			
+			// Remove the temporary loading message and show error
+			messages = messages.slice(0, -1);
+			messages = [...messages, { 
+				id: 'error-' + Date.now(),
+				role: 'assistant', 
+				content: 'Sorry, I encountered an error while regenerating the response. Please try again.',
+				isError: true
+			}];
+			
 			alert('Error editing message. Please try again.');
 		} finally {
 			isLoading = false;
@@ -622,7 +682,7 @@
 
 					{#each messages as message}
 						<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
-							<div class="max-w-xs sm:max-w-md lg:max-w-2xl px-3 lg:px-6 py-3 lg:py-4 rounded-2xl {message.role === 'user' ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-gray-800 border-2 border-gray-100 shadow-sm hover:shadow-md transition-shadow'}">
+							<div class="max-w-xs sm:max-w-md lg:max-w-2xl px-3 lg:px-6 py-3 lg:py-4 rounded-2xl {message.role === 'user' ? 'bg-blue-600 text-white shadow-lg' : message.isError ? 'bg-red-50 text-red-800 border-2 border-red-200' : 'bg-white text-gray-800 border-2 border-gray-100 shadow-sm hover:shadow-md transition-shadow'}">
 								{#if message.role === 'user'}
 									<div class="flex items-center space-x-2 lg:space-x-3 mb-2">
 										<div class="w-6 h-6 lg:w-8 lg:h-8 bg-white/20 rounded-full flex items-center justify-center">
@@ -673,9 +733,6 @@
 										<div class="prose prose-sm max-w-none">
 											<div class="text-sm lg:text-base leading-relaxed whitespace-pre-wrap text-white font-medium">
 												{message.content}
-												{#if isLoading && message.role === 'assistant' && message.content === ''}
-													<span class="inline-block w-2 h-4 bg-white animate-pulse"></span>
-												{/if}
 											</div>
 										</div>
 										
@@ -703,18 +760,34 @@
 									{/if}
 								{:else}
 									<div class="flex items-center space-x-2 lg:space-x-3 mb-2">
-										<div class="w-6 h-6 lg:w-8 lg:h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-											<svg class="w-3 h-3 lg:w-4 lg:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
-											</svg>
+										<div class="w-6 h-6 lg:w-8 lg:h-8 {message.isError ? 'bg-red-100' : 'bg-gradient-to-br from-blue-500 to-purple-600'} rounded-full flex items-center justify-center">
+											{#if message.isError}
+												<svg class="w-3 h-3 lg:w-4 lg:h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+												</svg>
+											{:else}
+												<svg class="w-3 h-3 lg:w-4 lg:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+												</svg>
+											{/if}
 										</div>
-										<span class="text-xs lg:text-sm font-semibold text-blue-600">AI Assistant</span>
+										<span class="text-xs lg:text-sm font-semibold {message.isError ? 'text-red-600' : 'text-blue-600'}">
+											{message.isError ? 'Error' : 'AI Assistant'}
+										</span>
 									</div>
 									<div class="prose prose-sm max-w-none">
-										<div class="text-sm lg:text-base leading-relaxed whitespace-pre-wrap text-gray-800 font-medium markdown-content">
-											{@html formatMessage(message.content)}
-											{#if isLoading && message.role === 'assistant' && message.content === ''}
-												<span class="inline-block w-2 h-4 bg-blue-500 animate-pulse"></span>
+										<div class="text-sm lg:text-base leading-relaxed whitespace-pre-wrap {message.isError ? 'text-red-700' : 'text-gray-800'} font-medium markdown-content">
+											{#if message.isLoading}
+												<div class="flex items-center space-x-2">
+													<span>Regenerating response...</span>
+													<div class="flex space-x-1">
+														<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce"></div>
+														<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+														<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+													</div>
+												</div>
+											{:else}
+												{@html formatMessage(message.content)}
 											{/if}
 										</div>
 									</div>
