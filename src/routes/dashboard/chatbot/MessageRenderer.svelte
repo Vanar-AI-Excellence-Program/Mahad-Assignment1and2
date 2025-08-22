@@ -1,112 +1,155 @@
 <script lang="ts">
-	export let content: string;
+    import {marked} from 'marked';
+    import { onMount } from 'svelte';
+    
+    export let content: string = '';
 	export let isLoading: boolean = false;
 	export let isError: boolean = false;
 
-	// Simple markdown-like formatting function
-	function formatContent(text: string): string {
-		if (!text) return '';
-		
-		let formatted = text;
-		
-		// Headers
-		formatted = formatted
-			.replace(/^### (.*$)/gim, '<h3>$1</h3>')
-			.replace(/^## (.*$)/gim, '<h2>$1</h2>')
-			.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-		
-		// Code blocks
-		formatted = formatted
-			.replace(/```([\s\S]*?)```/g, '<pre class="bg-gray-100 rounded-lg p-4 overflow-x-auto"><code>$1</code></pre>');
-		
-		// Inline code
-		formatted = formatted
-			.replace(/`([^`\n]+)`/g, '<code class="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono">$1</code>');
-		
-		// Bold and italic
-		formatted = formatted
-			.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-			.replace(/\*(.*?)\*/g, '<em>$1</em>');
-		
-		// Lists
-		formatted = formatted
-			.replace(/^(\s*)[*\-] (.*$)/gim, function(match, spaces, content) {
-				const indent = spaces.length;
-				return `<li style="margin-left: ${indent * 1.5}rem">${content}</li>`;
-			})
-			.replace(/^(\s*)(\d+)\. (.*$)/gim, function(match, spaces, number, content) {
-				const indent = spaces.length;
-				return `<li style="margin-left: ${indent * 1.5}rem">${content}</li>`;
-			});
-		
-		// Blockquotes
-		formatted = formatted
-			.replace(/^> (.*$)/gim, '<blockquote class="border-l-4 border-blue-500 pl-4 py-2 my-4 bg-blue-50 italic">$1</blockquote>');
-		
-		// Tables
-		formatted = formatted
-			.replace(/\|(.+)\|/g, function(match, content) {
-				const cells = content.split('|').map((cell: string) => cell.trim());
-				const isHeader = match.includes('---');
-				
-				if (isHeader) {
-					return ''; // Skip separator rows
-				}
-				
-				const cellHtml = cells.map((cell: string) => {
-					if (cell === '') return '';
-					return `<td class="border border-gray-300 px-3 py-2">${cell}</td>`;
-				}).join('');
-				
-				return `<tr class="border-b border-gray-300">${cellHtml}</tr>`;
-			});
-		
-		// Wrap table rows in table element
-		formatted = formatted
-			.replace(/(<tr[^>]*>.*?<\/tr>)/gs, '<div class="overflow-x-auto"><table class="min-w-full border-collapse border border-gray-300 mb-4">$1</table></div>');
-		
-		// Horizontal rules
-		formatted = formatted
-			.replace(/^---$/gim, '<hr class="border-t border-gray-300 my-6">');
-		
-		// Links
-		formatted = formatted
-			.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline">$1</a>');
-		
-		// Line breaks
-		formatted = formatted
-			.replace(/\n\n/g, '</p><p>')
-			.replace(/\n/g, '<br>');
-		
-		// Wrap in paragraph tags
-		formatted = formatted
-			.replace(/^(.*)$/gm, '<p>$1</p>');
-		
-		// Clean up empty paragraphs and fix list formatting
-		formatted = formatted
-			.replace(/<p><\/p>/g, '')
-			.replace(/<p><br><\/p>/g, '')
-			.replace(/<p><li>/g, '<li>')
-			.replace(/<\/li><\/p>/g, '</li>')
-			.replace(/<p><h1>/g, '<h1>')
-			.replace(/<\/h1><\/p>/g, '</h1>')
-			.replace(/<p><h2>/g, '<h2>')
-			.replace(/<\/h2><\/p>/g, '</h2>')
-			.replace(/<p><h3>/g, '<h3>')
-			.replace(/<\/h3><\/p>/g, '</h3>')
-			.replace(/<p><pre>/g, '<pre>')
-			.replace(/<\/pre><\/p>/g, '</pre>')
-			.replace(/<p><blockquote>/g, '<blockquote>')
-			.replace(/<\/blockquote><\/p>/g, '</blockquote>')
-			.replace(/<p><hr><\/p>/g, '<hr>');
-		
-		// Final cleanup
-		formatted = formatted
-			.replace(/^<p>/, '')
-			.replace(/<\/p>$/, '');
-		
-		return formatted;
-	}
+    let container: HTMLDivElement;
+    
+    // Configure marked for security and features
+    marked.setOptions({
+        breaks: true, // Convert line breaks to <br>
+        gfm: true,    // GitHub Flavored Markdown
+        sanitize: false, // We'll handle sanitization ourselves
+        smartLists: true,
+        smartypants: true
+    });
+    
+    // Simple HTML sanitization function
+    function sanitizeHtml(html: string): string {
+        // Remove potentially dangerous tags and attributes
+        return html
+            .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+            .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+            .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
+            .replace(/<embed\b[^<]*(?:(?!<\/embed>)<[^<]*)*<\/embed>/gi, '')
+            .replace(/javascript:/gi, '')
+            .replace(/on\w+\s*=/gi, '');
+    }
+    
+    // Copy code to clipboard
+    async function copyCode(codeText: string, button: HTMLButtonElement) {
+        try {
+            await navigator.clipboard.writeText(codeText);
+            // Change button to show success state
+            const originalHTML = button.innerHTML;
+            button.innerHTML = `
+                <svg class="copy-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+            `;
+            // Reset button after 2 seconds
+            setTimeout(() => {
+                button.innerHTML = originalHTML;
+            }, 2000);
+            console.log('Code copied to clipboard');
+        } catch (err) {
+            console.error('Failed to copy code:', err);
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = codeText;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            // Show success state even for fallback
+            const originalHTML = button.innerHTML;
+            button.innerHTML = `
+                <svg class="copy-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+            `;
+            setTimeout(() => {
+                button.innerHTML = originalHTML;
+            }, 2000);
+        }
+    }
+    
+    // Render markdown to HTML with copy buttons for code blocks
+    function renderMarkdown(text: string): string {
+        try {
+            let html = marked(text);
+            // Add copy buttons to code blocks
+            html = html.replace(
+                /<pre><code[^>]*>([\s\S]*?)<\/code><\/pre>/g,
+                (match: string, codeContent: string) => {
+                    const decodedContent = codeContent
+                        .replace(/&lt;/g, '<')
+                        .replace(/&gt;/g, '>')
+                        .replace(/&amp;/g, '&')
+                        .replace(/&quot;/g, '"')
+                        .replace(/&#39;/g, "'");
+                    return `
+                        <div class="code-block-wrapper">
+                            <button
+                                class="copy-button"
+                                data-code="${btoa(decodedContent)}"
+                                title="Copy code"
+                            >
+                                <svg class="copy-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                            </button>
+                            ${match}
+                        </div>
+                    `;
+                }
+            );
+            return sanitizeHtml(html);
+        } catch (error) {
+            console.error('Markdown rendering error:', error);
+            // Fallback to plain text with line breaks
+            return text.replace(/\n/g, '<br>');
+        }
+    }
+    
+    // Setup copy button event listeners
+    function setupCopyButtons() {
+        if (container) {
+            const copyButtons = container.querySelectorAll('.copy-button');
+            copyButtons.forEach(button => {
+                // Remove any existing listeners to prevent duplicates
+                button.removeEventListener('click', handleCopyClick);
+                button.addEventListener('click', handleCopyClick);
+            });
+        }
+    }
+    
+    // Handle copy button click
+    function handleCopyClick(e: Event) {
+        e.preventDefault();
+        e.stopPropagation();
+        // Find the button element (could be the target or its parent)
+        let buttonElement = e.target as HTMLElement;
+        while (buttonElement && !buttonElement.classList.contains('copy-button')) {
+            buttonElement = buttonElement.parentElement as HTMLElement;
+        }
+        if (buttonElement && buttonElement.classList.contains('copy-button')) {
+            const codeData = buttonElement.getAttribute('data-code');
+            if (codeData) {
+                const decodedContent = atob(codeData);
+                copyCode(decodedContent, buttonElement as HTMLButtonElement);
+            }
+        }
+    }
+    
+    // Update content when it changes
+    $: if (container && content) {
+        container.innerHTML = renderMarkdown(content);
+        // Use setTimeout to ensure DOM is updated
+        setTimeout(() => {
+            setupCopyButtons();
+        }, 0);
+    }
+    
+    onMount(() => {
+        // Initial setup
+        if (container) {
+            setupCopyButtons();
+        }
+    });
 </script>
 
 {#if isLoading}
@@ -119,13 +162,60 @@
 		</div>
 	</div>
 {:else}
-	<div class="prose prose-sm max-w-none {isError ? 'text-red-700' : 'text-gray-800'} markdown-content">
-		{@html formatContent(content)}
+    <div
+        bind:this={container}
+        class="prose prose-sm max-w-none {isError ? 'text-red-700' : 'text-gray-800'} markdown-content"
+    >
+        {#if !content}
+            <span class="text-gray-400">No content</span>
+        {/if}
 	</div>
 {/if}
 
 <style>
-	/* Custom styles for markdown content */
+    /* Essential styles for functionality */
+    .code-block-wrapper {
+        position: relative;
+        margin: 0.5rem 0;
+    }
+    
+    .copy-button {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        background-color: rgba(55, 65, 81, 0.8);
+        border: 1px solid rgba(156, 163, 175, 0.3);
+        color: #D1D5DB;
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        z-index: 10;
+        opacity: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 2rem;
+        min-height: 2rem;
+        user-select: none;
+    }
+    
+    .code-block-wrapper:hover .copy-button {
+        opacity: 1;
+    }
+    
+    .copy-button:hover {
+        background-color: rgba(75, 85, 99, 0.9);
+        color: #F9FAFB;
+        border-color: rgba(156, 163, 175, 0.5);
+    }
+    
+    .copy-icon {
+        width: 1rem;
+        height: 1rem;
+    }
+    
+    /* Keep your existing markdown styles */
 	:global(.markdown-content) {
 		/* Headings */
 		:global(h1) {
