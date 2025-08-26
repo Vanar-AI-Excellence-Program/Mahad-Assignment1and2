@@ -761,18 +761,35 @@
 												<span>Edit</span>
 											</button>
 											
-											<!-- Only show "Start new chat from here" button for the last user message in the conversation -->
-											{#if index === messages.length - 1 || (index < messages.length - 1 && messages[index + 1]?.role === 'assistant')}
-												<button
-													on:click={() => startNewChat()}
-													class="text-xs text-white hover:text-blue-100 font-medium flex items-center space-x-1 hover:bg-white/20 px-1.5 lg:px-2 py-1 rounded transition-colors group"
-													title="Start a new chat from this message"
-												>
-													<svg class="w-2.5 h-2.5 lg:w-3 lg:h-3 text-white group-hover:text-blue-100 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
-													</svg>
-													<span>New chat from here</span>
-												</button>
+											<!-- Branch Navigation Buttons (replacing "New chat from here") -->
+											{#if messages.length > 0 && (canGoBack || canGoForward)}
+												<div class="flex items-center space-x-1">
+													<button
+														on:click={goToPreviousBranch}
+														disabled={!canGoBack}
+														class="flex items-center space-x-1 px-2 py-1 text-xs font-medium text-white hover:text-blue-100 disabled:text-white/50 disabled:cursor-not-allowed transition-all duration-200 rounded hover:bg-white/20 disabled:hover:bg-transparent"
+														title="Go to previous branch"
+													>
+														<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+														</svg>
+														<span>Previous</span>
+													</button>
+													
+													<div class="w-px h-3 bg-white/30 mx-1"></div>
+													
+													<button
+														on:click={goToNextBranch}
+														disabled={!canGoForward}
+														class="flex items-center space-x-1 px-2 py-1 text-xs font-medium text-white hover:text-blue-100 disabled:text-white/50 disabled:cursor-not-allowed transition-all duration-200 rounded hover:bg-white/20 disabled:hover:bg-transparent"
+														title="Go to next branch"
+													>
+														<span>Next</span>
+														<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+														</svg>
+													</button>
+												</div>
 											{/if}
 										</div>
 									{/if}
@@ -854,58 +871,6 @@
 
 			<!-- Chat Input -->
 			<div class="bg-white rounded-b-xl lg:rounded-br-xl shadow-sm border-t-2 border-gray-100 p-3 lg:p-6 flex-shrink-0">
-				<!-- Branch Navigation Buttons (ChatGPT Style) -->
-				{#if messages.length > 0 && (canGoBack || canGoForward)}
-					<div class="flex items-center justify-center space-x-1 mb-4">
-						<button
-							on:click={goToPreviousBranch}
-							disabled={!canGoBack}
-							class="flex items-center space-x-1.5 px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 disabled:text-gray-400 disabled:cursor-not-allowed transition-all duration-200 rounded-lg hover:bg-gray-100 disabled:hover:bg-transparent border border-gray-200 hover:border-gray-300 disabled:border-gray-100"
-							title="Go to previous branch"
-						>
-							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-							</svg>
-							<span>Previous</span>
-						</button>
-						
-						<div class="w-px h-6 bg-gray-300 mx-2"></div>
-						
-						<button
-							on:click={goToNextBranch}
-							disabled={!canGoForward}
-							class="flex items-center space-x-1.5 px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 disabled:text-gray-400 disabled:cursor-not-allowed transition-all duration-200 rounded-lg hover:bg-gray-100 disabled:hover:bg-transparent border border-gray-200 hover:border-gray-300 disabled:border-gray-100"
-							title="Go to next branch"
-						>
-							<span>Next</span>
-							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-							</svg>
-						</button>
-					</div>
-					
-					<!-- Branch Path Breadcrumb -->
-					{#if currentBranchId}
-						{@const branchPath = getBranchPath(currentBranchId)}
-						{#if branchPath.length > 1}
-							<div class="flex items-center justify-center mb-3">
-								<div class="flex items-center space-x-1 text-xs text-gray-500">
-									{#each branchPath as branch, index}
-										{#if index > 0}
-											<svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-											</svg>
-										{/if}
-										<span class="px-2 py-1 rounded {branch.id === currentBranchId ? 'bg-blue-100 text-blue-700 font-medium' : 'text-gray-600'}">
-											{branch.name || 'Main Branch'}
-										</span>
-									{/each}
-								</div>
-							</div>
-						{/if}
-					{/if}
-				{/if}
-
 				<form on:submit={handleChatSubmit} class="flex space-x-2 lg:space-x-4">
 					<div class="flex-1 relative">
 						<input
