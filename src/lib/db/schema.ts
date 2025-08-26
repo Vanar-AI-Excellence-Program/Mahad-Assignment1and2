@@ -43,14 +43,28 @@ export const userProfiles = pgTable('user_profiles', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Chat messages table
+// Chat messages table with tree structure support
 export const chats = pgTable('chats', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  parentId: uuid('parent_id').references(() => chats.id, { onDelete: 'cascade' }),
+  parentId: uuid('parent_id').references((): any => chats.id, { onDelete: 'cascade' }),
   role: text('role', { enum: ['user', 'assistant'] }).notNull(),
   content: text('content').notNull(),
+  children: text('children').default('[]'), // JSON array of child message IDs
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Conversation branches table - stores branch metadata for navigation
+export const conversationBranches = pgTable('conversation_branches', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  conversationId: uuid('conversation_id').notNull(), // Root message ID of the conversation
+  branchName: text('branch_name').notNull(),
+  forkPointMessageId: uuid('fork_point_message_id'), // The message where this branch was forked from
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 // Relations
@@ -61,6 +75,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   sessions: many(sessions),
   chats: many(chats),
+  conversationBranches: many(conversationBranches),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -90,6 +105,15 @@ export const chatsRelations = relations(chats, ({ one, many }) => ({
   children: many(chats, {
     relationName: 'chat_parent_child',
   }),
+
+}));
+
+export const conversationBranchesRelations = relations(conversationBranches, ({ one, many }) => ({
+  user: one(users, {
+    fields: [conversationBranches.userId],
+    references: [users.id],
+  }),
+  messages: many(chats),
 }));
 
 // Types for TypeScript
@@ -103,3 +127,5 @@ export type UserProfile = typeof userProfiles.$inferSelect;
 export type NewUserProfile = typeof userProfiles.$inferInsert;
 export type Chat = typeof chats.$inferSelect;
 export type NewChat = typeof chats.$inferInsert;
+export type ConversationBranch = typeof conversationBranches.$inferSelect;
+export type NewConversationBranch = typeof conversationBranches.$inferInsert;

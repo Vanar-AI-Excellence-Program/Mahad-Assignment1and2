@@ -26,6 +26,8 @@
 		"fix:permissions": "node tests/fix-db-permissions.js",
 		"migrate:createdat": "node tests/migrate-add-createdat.js",
 		"test:simple": "node tests/simple-test.js",
+		"test:forking": "node test-forking-system.js",
+
 		"docker:up": "docker-compose up -d",
 		"docker:down": "docker-compose down",
 		"docker:restart": "docker-compose restart",
