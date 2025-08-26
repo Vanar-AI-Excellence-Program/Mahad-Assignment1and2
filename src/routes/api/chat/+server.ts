@@ -2,10 +2,10 @@ import { google } from '@ai-sdk/google';
 import { streamText } from 'ai';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { sessions, chats } from '$lib/db/schema';
-import { eq, and, gt, desc, inArray } from 'drizzle-orm';
+import { sessions, conversations, branches, messages } from '$lib/db/schema';
+import { eq, and, gt, desc, asc } from 'drizzle-orm';
 import { config } from '$lib/config/env';
-import { buildChatTree } from '$lib/utils/chat-tree';
+import { ForkingService } from '$lib/utils/forking-service';
 
 interface ChatMessage {
 	id?: string;
@@ -16,6 +16,7 @@ interface ChatMessage {
 interface EditMessageRequest {
 	messageId: string;
 	newContent: string;
+	conversationId: string;
 }
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
@@ -42,10 +43,15 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 			return new Response('Unauthorized', { status: 401 });
 		}
 
-		const { messages, parentId }: { messages: ChatMessage[]; parentId?: string } = await request.json();
+		const { messages: chatMessages, conversationId, branchId, title }: { 
+			messages: ChatMessage[]; 
+			conversationId?: string;
+			branchId?: string;
+			title?: string;
+		} = await request.json();
 
 		// Validate messages
-		if (!messages || !Array.isArray(messages)) {
+		if (!chatMessages || !Array.isArray(chatMessages)) {
 			return new Response('Invalid messages format', { status: 400 });
 		}
 
@@ -55,30 +61,46 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 			return new Response('AI service not configured', { status: 500 });
 		}
 
-		// Save user message to database with parent_id
-		const userMessage = messages[messages.length - 1];
+		let actualConversationId = conversationId;
+		let actualBranchId = branchId;
+
+		// Create conversation if it doesn't exist
+		if (!actualConversationId) {
+			const conversation = await ForkingService.createConversation(
+				session.user.id, 
+				title || 'New Conversation'
+			);
+			actualConversationId = conversation.id;
+			
+			// Get the main branch
+			const branches = await ForkingService.getConversationBranches(conversation.id);
+			actualBranchId = branches[0].id;
+		}
+
+		// Get or create branch
+		if (!actualBranchId) {
+			const branches = await ForkingService.getConversationBranches(actualConversationId);
+			actualBranchId = branches[0].id;
+		}
+
+		// Save user message
+		const userMessage = chatMessages[chatMessages.length - 1];
 		let savedUserMessageId: string | undefined;
 		
 		if (userMessage.role === 'user') {
-			// Insert user message and get the ID
-			await db.insert(chats).values({
-				userId: session.user.id,
-				parentId: parentId || null, // null for new conversation, parent_id for forking
-				role: 'user',
-				content: userMessage.content
-			});
+			// Get the parent message ID (last message in the branch)
+			const branchMessages = await ForkingService.getBranchMessages(actualBranchId);
+			const parentId = branchMessages.length > 0 ? branchMessages[branchMessages.length - 1].id : undefined;
+
+			// Add message to branch
+			const savedMessage = await ForkingService.addMessage(
+				actualBranchId,
+				'user',
+				userMessage.content,
+				parentId
+			);
 			
-			// Get the ID of the just-inserted message
-			const savedMessage = await db.query.chats.findFirst({
-				where: and(
-					eq(chats.userId, session.user.id),
-					eq(chats.content, userMessage.content),
-					eq(chats.role, 'user')
-				),
-				orderBy: chats.createdAt,
-			});
-			
-			savedUserMessageId = savedMessage?.id;
+			savedUserMessageId = savedMessage.id;
 		}
 
 		// Create a ReadableStream for streaming the response
@@ -88,7 +110,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 					// Generate streaming response using Gemini
 					const result = await streamText({
 						model: google('gemini-2.0-flash'),
-						messages: messages.map((msg: ChatMessage) => ({
+						messages: chatMessages.map((msg: ChatMessage) => ({
 							role: msg.role,
 							content: msg.content
 						})),
@@ -105,14 +127,14 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 						controller.enqueue(data);
 					}
 
-					// Save assistant message to database after streaming completes
+					// Save assistant message
 					if (fullContent.trim() && savedUserMessageId) {
-						await db.insert(chats).values({
-							userId: session.user.id,
-							parentId: savedUserMessageId, // Link to the user message
-							role: 'assistant',
-							content: fullContent
-						});
+						await ForkingService.addMessage(
+							actualBranchId,
+							'assistant',
+							fullContent,
+							savedUserMessageId
+						);
 					}
 
 					// Send end signal
@@ -146,8 +168,8 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 	}
 };
 
-// GET endpoint to fetch tree-structured chat history
-export const GET: RequestHandler = async ({ cookies }) => {
+// GET endpoint to fetch conversation data
+export const GET: RequestHandler = async ({ cookies, url }) => {
 	try {
 		// Check authentication
 		const sessionToken = cookies.get('authjs.session-token');
@@ -171,20 +193,45 @@ export const GET: RequestHandler = async ({ cookies }) => {
 			return new Response('Unauthorized', { status: 401 });
 		}
 
-		// Fetch all chat messages for the user
-		const userMessages = await db.query.chats.findMany({
-			where: eq(chats.userId, session.user.id),
-			orderBy: chats.createdAt,
-		});
+		// Get query parameters
+		const conversationId = url.searchParams.get('conversationId');
+		const branchId = url.searchParams.get('branchId');
 
-		// Build tree structure
-		const chatTree = buildChatTree(userMessages);
+		if (conversationId) {
+			// Get specific conversation data
+			const branches = await ForkingService.getConversationBranches(conversationId);
+			const activeBranchId = branchId || branches[0]?.id;
+			
+			if (activeBranchId) {
+				const messages = await ForkingService.getBranchMessages(activeBranchId);
+				const conversationTree = await ForkingService.getConversationTree(conversationId);
 
-		return new Response(JSON.stringify(chatTree), {
-			headers: {
-				'Content-Type': 'application/json',
-			},
-		});
+				return new Response(JSON.stringify({
+					conversationId,
+					branchId: activeBranchId,
+					branches,
+					messages,
+					tree: conversationTree
+				}), {
+					headers: {
+						'Content-Type': 'application/json',
+					},
+				});
+			}
+		} else {
+			// Get all conversations for the user
+			const userConversations = await ForkingService.getUserConversations(session.user.id);
+			
+			return new Response(JSON.stringify({
+				conversations: userConversations
+			}), {
+				headers: {
+					'Content-Type': 'application/json',
+				},
+			});
+		}
+
+		return new Response('Conversation not found', { status: 404 });
 
 	} catch (error) {
 		console.error('Chat history API error:', error);
@@ -192,7 +239,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
 	}
 };
 
-// PUT endpoint to edit a user message and regenerate responses
+// PUT endpoint to edit a user message and fork the conversation
 export const PUT: RequestHandler = async ({ request, cookies }) => {
 	try {
 		// Check authentication
@@ -217,56 +264,28 @@ export const PUT: RequestHandler = async ({ request, cookies }) => {
 			return new Response('Unauthorized', { status: 401 });
 		}
 
-		const { messageId, newContent }: EditMessageRequest = await request.json();
+		const { messageId, newContent, branchName }: EditMessageRequest & { branchName?: string } = await request.json();
 
 		// Validate request
 		if (!messageId || !newContent) {
 			return new Response('Invalid request: messageId and newContent are required', { status: 400 });
 		}
 
-		// Find the message to edit
-		const messageToEdit = await db.query.chats.findFirst({
-			where: and(
-				eq(chats.id, messageId),
-				eq(chats.userId, session.user.id),
-				eq(chats.role, 'user') // Only user messages can be edited
-			)
-		});
-
-		if (!messageToEdit) {
-			return new Response('Message not found or not editable', { status: 404 });
-		}
-
-		// Get all messages in the current branch up to this message (excluding the message being edited)
-		const branchMessages = await getBranchMessagesUpTo(messageId, session.user.id, false);
-		
-		// Delete all child nodes (AI responses and subsequent messages) under the edited message
-		await deleteBranchFromMessage(messageId, session.user.id);
-		
-		// Update the original message with new content
-		await db.update(chats)
-			.set({
-				content: newContent,
-				isEdited: true,
-				originalContent: messageToEdit.content
-			})
-			.where(eq(chats.id, messageId));
+		// Edit the message and fork the conversation
+		const result = await ForkingService.editUserMessage(messageId, newContent, branchName);
 
 		// Create a ReadableStream for streaming the regenerated response
 		const stream = new ReadableStream({
 			async start(controller) {
 				try {
 					// Prepare messages for AI (include the edited message)
-					const messagesForAI = [
-						...branchMessages.map(msg => ({
-							role: msg.role,
-							content: msg.content
-						})),
-						{ role: 'user', content: newContent }
-					];
+					const messagesForAI = result.messages.map(msg => ({
+						role: msg.role,
+						content: msg.content
+					}));
 
 					// Generate streaming response using Gemini
-					const result = await streamText({
+					const aiResult = await streamText({
 						model: google('gemini-2.0-flash'),
 						messages: messagesForAI,
 						temperature: 0.7,
@@ -275,21 +294,21 @@ export const PUT: RequestHandler = async ({ request, cookies }) => {
 					let fullContent = '';
 
 					// Stream the response chunks
-					for await (const chunk of result.textStream) {
+					for await (const chunk of aiResult.textStream) {
 						fullContent += chunk;
 						const encoder = new TextEncoder();
 						const data = encoder.encode(`data: ${JSON.stringify({ chunk })}\n\n`);
 						controller.enqueue(data);
 					}
 
-					// Save the new AI response as a child of the edited message
+					// Save the new AI response
 					if (fullContent.trim()) {
-						await db.insert(chats).values({
-							userId: session.user.id,
-							parentId: messageId,
-							role: 'assistant',
-							content: fullContent
-						});
+						await ForkingService.addMessage(
+							result.branch.id,
+							'assistant',
+							fullContent,
+							result.messages[result.messages.length - 1].id
+						);
 					}
 
 					// Send end signal
@@ -322,66 +341,3 @@ export const PUT: RequestHandler = async ({ request, cookies }) => {
 		return new Response('Internal server error', { status: 500 });
 	}
 };
-
-// Helper function to get all messages in a branch up to a specific message
-async function getBranchMessagesUpTo(messageId: string, userId: string, includeTarget: boolean = true): Promise<any[]> {
-	const messages: any[] = [];
-	const messageMap = new Map<string, any>();
-	
-	// Get all messages for the user
-	const allMessages = await db.query.chats.findMany({
-		where: eq(chats.userId, userId),
-		orderBy: chats.createdAt,
-	});
-
-	// Build lookup map
-	allMessages.forEach(msg => messageMap.set(msg.id, msg));
-
-	// Find the target message and collect all ancestors
-	let currentMessage = messageMap.get(messageId);
-	while (currentMessage && currentMessage.parentId) {
-		if (includeTarget || currentMessage.id !== messageId) {
-			messages.unshift(currentMessage);
-		}
-		currentMessage = messageMap.get(currentMessage.parentId);
-	}
-	
-	// Add the root message if it exists and we should include it
-	if (currentMessage && (includeTarget || currentMessage.id !== messageId)) {
-		messages.unshift(currentMessage);
-	}
-
-	return messages;
-}
-
-// Helper function to delete all child nodes under a specific message
-async function deleteBranchFromMessage(messageId: string, userId: string): Promise<void> {
-	// Get all messages that are descendants of the edited message
-	const allMessages = await db.query.chats.findMany({
-		where: eq(chats.userId, userId),
-		orderBy: chats.createdAt,
-	});
-
-	// Find all descendant message IDs
-	const descendantIds = new Set<string>();
-	
-	function collectDescendants(parentId: string): void {
-		allMessages.forEach(msg => {
-			if (msg.parentId === parentId) {
-				descendantIds.add(msg.id);
-				collectDescendants(msg.id);
-			}
-		});
-	}
-	
-	collectDescendants(messageId);
-	
-	// Delete all descendant messages
-	if (descendantIds.size > 0) {
-		const descendantIdsArray = Array.from(descendantIds);
-		await db.delete(chats)
-			.where(inArray(chats.id, descendantIdsArray));
-		
-		console.log(`Deleted ${descendantIds.size} descendant messages under message ${messageId}`);
-	}
-}

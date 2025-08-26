@@ -43,11 +43,29 @@ export const userProfiles = pgTable('user_profiles', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Chat messages table
-export const chats = pgTable('chats', {
+// Conversations table - represents a chat session
+export const conversations = pgTable('conversations', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  parentId: uuid('parent_id').references(() => chats.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Branches table - represents different conversation paths
+export const branches = pgTable('branches', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conversationId: uuid('conversation_id').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
+  parentBranchId: uuid('parent_branch_id').references(() => branches.id, { onDelete: 'set null' }),
+  name: text('name'), // Optional name for the branch
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Messages table - individual messages within a branch
+export const messages = pgTable('messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  branchId: uuid('branch_id').notNull().references(() => branches.id, { onDelete: 'cascade' }),
+  parentId: uuid('parent_id').references(() => messages.id, { onDelete: 'set null' }),
   role: text('role', { enum: ['user', 'assistant'] }).notNull(),
   content: text('content').notNull(),
   isEdited: boolean('is_edited').default(false),
@@ -62,7 +80,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     references: [userProfiles.userId],
   }),
   sessions: many(sessions),
-  chats: many(chats),
+  conversations: many(conversations),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -79,18 +97,42 @@ export const userProfilesRelations = relations(userProfiles, ({ one }) => ({
   }),
 }));
 
-export const chatsRelations = relations(chats, ({ one, many }) => ({
+export const conversationsRelations = relations(conversations, ({ one, many }) => ({
   user: one(users, {
-    fields: [chats.userId],
+    fields: [conversations.userId],
     references: [users.id],
   }),
-  parent: one(chats, {
-    fields: [chats.parentId],
-    references: [chats.id],
-    relationName: 'chat_parent_child',
+  branches: many(branches),
+}));
+
+export const branchesRelations = relations(branches, ({ one, many }) => ({
+  conversation: one(conversations, {
+    fields: [branches.conversationId],
+    references: [conversations.id],
   }),
-  children: many(chats, {
-    relationName: 'chat_parent_child',
+  parentBranch: one(branches, {
+    fields: [branches.parentBranchId],
+    references: [branches.id],
+    relationName: 'branch_parent_child',
+  }),
+  childBranches: many(branches, {
+    relationName: 'branch_parent_child',
+  }),
+  messages: many(messages),
+}));
+
+export const messagesRelations = relations(messages, ({ one, many }) => ({
+  branch: one(branches, {
+    fields: [messages.branchId],
+    references: [branches.id],
+  }),
+  parent: one(messages, {
+    fields: [messages.parentId],
+    references: [messages.id],
+    relationName: 'message_parent_child',
+  }),
+  children: many(messages, {
+    relationName: 'message_parent_child',
   }),
 }));
 
@@ -103,5 +145,9 @@ export type VerificationToken = typeof verificationTokens.$inferSelect;
 export type NewVerificationToken = typeof verificationTokens.$inferInsert;
 export type UserProfile = typeof userProfiles.$inferSelect;
 export type NewUserProfile = typeof userProfiles.$inferInsert;
-export type Chat = typeof chats.$inferSelect;
-export type NewChat = typeof chats.$inferInsert;
+export type Conversation = typeof conversations.$inferSelect;
+export type NewConversation = typeof conversations.$inferInsert;
+export type Branch = typeof branches.$inferSelect;
+export type NewBranch = typeof branches.$inferInsert;
+export type Message = typeof messages.$inferSelect;
+export type NewMessage = typeof messages.$inferInsert;
