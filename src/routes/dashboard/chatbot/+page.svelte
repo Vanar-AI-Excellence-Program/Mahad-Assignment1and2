@@ -1240,6 +1240,17 @@
 			<!-- Chat Input -->
 			<div class="bg-white rounded-b-xl lg:rounded-br-xl shadow-sm border-t-2 border-gray-100 p-3 lg:p-6 flex-shrink-0">
 					<form on:submit={handleChatSubmit} class="flex space-x-2 lg:space-x-4">
+						<!-- Upload Button -->
+						<button
+							type="button"
+							class="px-3 lg:px-4 py-3 lg:py-4 bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-700 border-2 border-gray-200 hover:border-gray-300 rounded-xl lg:rounded-2xl transition-all duration-200 flex items-center justify-center shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+							disabled={isLoading || isEditing}
+							aria-label="Upload file"
+						>
+							<svg class="w-5 h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+							</svg>
+						</button>
 						<div class="flex-1 relative">
 							<input
 								bind:value={input}
