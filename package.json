@@ -27,7 +27,6 @@
 		"migrate:createdat": "node tests/migrate-add-createdat.js",
 		"test:simple": "node tests/simple-test.js",
 		"test:forking": "node test-forking-system.js",
-
 		"docker:up": "docker-compose up -d",
 		"docker:down": "docker-compose down",
 		"docker:restart": "docker-compose restart",
@@ -35,7 +34,12 @@
 		"docker:status": "docker-compose ps",
 		"docker:clean": "docker-compose down -v",
 		"docker:rebuild": "docker-compose down && docker-compose up -d --build",
-		"db:setup": "npm run docker:up && sleep 5 && npm run db:migrate"
+		"db:setup": "npm run docker:up && sleep 5 && npm run db:migrate",
+		"rag:up": "docker compose up -d",
+		"rag:down": "docker compose down",
+		"rag:logs": "docker compose logs -f",
+		"rag:status": "docker compose ps",
+		"rag:test": "curl -X POST http://localhost:8000/embed -H 'Content-Type: application/json' -d '{\"text\": \"test\"}'"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-vercel": "^4.0.5",
@@ -58,8 +62,11 @@
 		"@sveltejs/kit": "^2.0.0",
 		"ai": "^5.0.14",
 		"bcryptjs": "^2.4.3",
+		"dotenv": "^17.2.1",
 		"drizzle-orm": "^0.44.4",
 		"nodemailer": "^6.9.7",
+		"patch-package": "^8.0.0",
+		"pdf-parse": "^1.1.1",
 		"pnpm": "^10.14.0",
 		"postgres": "^3.4.3",
 		"svelte": "^5.0.0",

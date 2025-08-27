@@ -34,6 +34,10 @@
 	// Input focus management
 	let inputElement: HTMLInputElement;
 	
+	// File upload state
+	let isUploading = false;
+	let uploadMessage = '';
+	
 	// Keyboard shortcuts
 	function handleKeydown(event: KeyboardEvent) {
 		// Ctrl/Cmd + Enter to submit
@@ -206,6 +210,73 @@
 		}).catch(err => {
 			console.error('Failed to copy message:', err);
 		});
+	}
+
+	// Handle file upload
+	async function handleFileUpload() {
+		// Create a hidden file input
+		const fileInput = document.createElement('input');
+		fileInput.type = 'file';
+		fileInput.accept = '.txt,.pdf';
+		fileInput.style.display = 'none';
+		
+		fileInput.onchange = async (event) => {
+			const target = event.target as HTMLInputElement;
+			const file = target.files?.[0];
+			
+			if (!file) return;
+			
+			// Validate file type
+			const allowedTypes = ['text/plain', 'application/pdf'];
+			if (!allowedTypes.includes(file.type)) {
+				uploadMessage = 'Only .txt and .pdf files are supported';
+				return;
+			}
+			
+			// Validate file size (10MB limit)
+			const maxSize = 10 * 1024 * 1024; // 10MB
+			if (file.size > maxSize) {
+				uploadMessage = 'File size must be less than 10MB';
+				return;
+			}
+			
+			isUploading = true;
+			uploadMessage = 'Uploading and processing file...';
+			
+			try {
+				const formData = new FormData();
+				formData.append('file', file);
+				
+				const response = await fetch('/api/upload', {
+					method: 'POST',
+					body: formData,
+				});
+				
+				const result = await response.json();
+				
+				if (response.ok) {
+					uploadMessage = `✅ File "${file.name}" uploaded successfully! ${result.document.chunks} chunks created.`;
+					
+					// Clear message after 5 seconds
+					setTimeout(() => {
+						uploadMessage = '';
+					}, 5000);
+				} else {
+					uploadMessage = `❌ Upload failed: ${result.error}`;
+				}
+			} catch (error) {
+				console.error('Upload error:', error);
+				uploadMessage = '❌ Upload failed. Please try again.';
+			} finally {
+				isUploading = false;
+			}
+		};
+		
+		// Trigger file selection
+		fileInput.click();
+		
+		// Clean up
+		fileInput.remove();
 	}
 
 	// Version control functions
@@ -1239,17 +1310,32 @@
 
 			<!-- Chat Input -->
 			<div class="bg-white rounded-b-xl lg:rounded-br-xl shadow-sm border-t-2 border-gray-100 p-3 lg:p-6 flex-shrink-0">
-					<form on:submit={handleChatSubmit} class="flex space-x-2 lg:space-x-4">
+				<!-- Upload Status Message -->
+				{#if uploadMessage}
+					<div class="mb-3 p-3 rounded-lg text-sm {uploadMessage.startsWith('✅') ? 'bg-green-100 text-green-800 border border-green-200' : uploadMessage.startsWith('❌') ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-blue-100 text-blue-800 border border-blue-200'}">
+						{uploadMessage}
+					</div>
+				{/if}
+				
+				<form on:submit={handleChatSubmit} class="flex space-x-2 lg:space-x-4">
 						<!-- Upload Button -->
 						<button
 							type="button"
+							on:click={handleFileUpload}
 							class="px-3 lg:px-4 py-3 lg:py-4 bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-700 border-2 border-gray-200 hover:border-gray-300 rounded-xl lg:rounded-2xl transition-all duration-200 flex items-center justify-center shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-							disabled={isLoading || isEditing}
+							disabled={isLoading || isEditing || isUploading}
 							aria-label="Upload file"
 						>
-							<svg class="w-5 h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-							</svg>
+							{#if isUploading}
+								<svg class="w-5 h-5 lg:w-6 lg:h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+									<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+									<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+								</svg>
+							{:else}
+								<svg class="w-5 h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+								</svg>
+							{/if}
 						</button>
 						<div class="flex-1 relative">
 							<input

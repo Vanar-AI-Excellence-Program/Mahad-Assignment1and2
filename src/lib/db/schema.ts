@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, uuid, boolean, varchar, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, boolean, varchar, primaryKey, integer } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { relations } from 'drizzle-orm';
 
 // Users table
@@ -116,6 +117,36 @@ export const conversationBranchesRelations = relations(conversationBranches, ({ 
   messages: many(chats),
 }));
 
+// RAG System Tables
+export const documents = pgTable('documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  mime: text('mime').notNull(),
+  size_bytes: integer('size_bytes').notNull(),
+  created_at: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const chunks = pgTable('chunks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  document_id: uuid('document_id').notNull().references(() => documents.id, { onDelete: 'cascade' }),
+  content: text('content').notNull(),
+  embedding: text('embedding').notNull(), // Will store vector as text, converted in application layer
+  chunk_index: integer('chunk_index').notNull(),
+  created_at: timestamp('created_at').defaultNow().notNull(),
+});
+
+// RAG Relations
+export const documentsRelations = relations(documents, ({ many }) => ({
+  chunks: many(chunks),
+}));
+
+export const chunksRelations = relations(chunks, ({ one }) => ({
+  document: one(documents, {
+    fields: [chunks.document_id],
+    references: [documents.id],
+  }),
+}));
+
 // Types for TypeScript
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -129,3 +160,11 @@ export type Chat = typeof chats.$inferSelect;
 export type NewChat = typeof chats.$inferInsert;
 export type ConversationBranch = typeof conversationBranches.$inferSelect;
 export type NewConversationBranch = typeof conversationBranches.$inferInsert;
+export type Document = typeof documents.$inferSelect;
+export type NewDocument = typeof documents.$inferInsert;
+export type Chunk = typeof chunks.$inferSelect;
+export type NewChunk = typeof chunks.$inferInsert;
+
+// SQL functions for pgvector
+export const createVectorExtension = sql`CREATE EXTENSION IF NOT EXISTS vector`;
+export const createVectorIndex = sql`CREATE INDEX IF NOT EXISTS chunks_embedding_idx ON chunks USING ivfflat (embedding::vector(768)) WITH (lists = 100)`;

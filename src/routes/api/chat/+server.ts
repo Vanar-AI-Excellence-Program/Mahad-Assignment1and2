@@ -15,7 +15,7 @@ interface ChatMessage {
 }
 
 // Enhanced system prompt for better formatting
-const SYSTEM_PROMPT = `You are a helpful AI assistant powered by Google Gemini. Please follow these guidelines for your responses:
+const BASE_SYSTEM_PROMPT = `You are a helpful AI assistant powered by Google Gemini. Please follow these guidelines for your responses:
 
 1. **Formatting**: Always use proper markdown formatting for better readability:
    - Use headers (# ## ###) for sections
@@ -98,6 +98,22 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 
 		// Handle forking system integration
 		const userMessage = messages[messages.length - 1];
+
+		// Retrieve relevant context using RAG if this is a user message
+		let enhancedSystemPrompt = BASE_SYSTEM_PROMPT;
+		if (userMessage.role === 'user') {
+			try {
+				const { retrieveContext, buildEnhancedPrompt } = await import('$lib/utils/rag');
+				const context = await retrieveContext(userMessage.content);
+				enhancedSystemPrompt = buildEnhancedPrompt(BASE_SYSTEM_PROMPT, context);
+				
+				if (context) {
+					console.log('🔧 [API] Retrieved RAG context for query:', userMessage.content.substring(0, 100));
+				}
+			} catch (error) {
+				console.warn('🔧 [API] RAG context retrieval failed, using base prompt:', error);
+			}
+		}
 		let conversationId: string | undefined;
 		let savedUserMessageId: string | undefined;
 
@@ -200,7 +216,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 				try {
 					// Prepare messages with system prompt
 					const enhancedMessages = [
-						{ role: 'system' as const, content: SYSTEM_PROMPT },
+						{ role: 'system' as const, content: enhancedSystemPrompt },
 						...messages.map((msg: ChatMessage) => ({
 							role: msg.role,
 							content: msg.content
@@ -212,7 +228,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 						model: google('gemini-2.0-flash'),
 						messages: enhancedMessages,
 						temperature: 0.7,
-						maxTokens: 4000, // Increased token limit for better responses
 					});
 
 					let fullContent = '';
