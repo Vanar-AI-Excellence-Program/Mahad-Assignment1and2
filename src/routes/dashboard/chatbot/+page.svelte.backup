@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { onDestroy } from 'svelte';
-	import { 
+	import {
 		dbChatsToTree,
 		getActivePath,
 		createFork,
@@ -12,9 +11,6 @@
 		getConversationTitle,
 		getLastMessage,
 		getConversationCreatedAt,
-		getVersionNavigationInfo,
-		goToPreviousVersion,
-		goToNextVersion,
 		type ChatTree,
 		type ChatTreeNode,
 		type ConversationState
@@ -25,57 +21,26 @@
 	let conversations: Record<string, ChatTree> = {}; // Each conversation has its own tree
 	let currentConversationId: string | null = null;
 	let currentNodeId: string | null = null;
-	
+
 	// Get the current conversation's tree
 	$: currentChatTree = currentConversationId ? conversations[currentConversationId] || {} : {};
-	
+
 	// UI state
 	let input = '';
 	let isLoading = false;
 	let showHistory = true;
 	let editingMessageId: string | null = null;
 	let editingContent = '';
-	let autoScrollRequested = false;
 
-	// Persist/restore UI state (conversation + active node)
-	const UI_STATE_KEY = 'chat_ui_state_v1';
-	let restoredConversationId: string | null = null;
-	let restoredNodeId: string | null = null;
-	let hasAppliedRestore = false;
-
-	function loadUIState() {
-		try {
-			const raw = localStorage.getItem(UI_STATE_KEY);
-			if (!raw) return;
-			const parsed = JSON.parse(raw);
-			restoredConversationId = parsed?.conversationId || null;
-			restoredNodeId = parsed?.nodeId || null;
-			console.log('Restored UI state:', { restoredConversationId, restoredNodeId });
-		} catch (e) {
-			console.warn('Failed to load UI state:', e);
-		}
-	}
-
-	function saveUIState() {
-		try {
-			localStorage.setItem(UI_STATE_KEY, JSON.stringify({
-				conversationId: currentConversationId,
-				nodeId: currentNodeId
-			}));
-		} catch (e) {
-			console.warn('Failed to save UI state:', e);
-		}
-	}
-	
 	// Computed values for current conversation
 	$: messages = getActivePath(currentChatTree, currentNodeId);
-	
+
 	// Fallback: if no messages from path, show all messages in current conversation
-	$: displayMessages = messages.length > 0 ? messages : 
-		(currentConversationId ? Object.values(currentChatTree).filter(node => 
+	$: displayMessages = messages.length > 0 ? messages :
+		(currentConversationId ? Object.values(currentChatTree).filter(node =>
 			node.conversationId === currentConversationId
 		).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) : []);
-	
+
 	// Navigation info
 	$: navigationInfo = currentNodeId ? getNavigationInfo(currentChatTree, currentNodeId) : {
 		hasParent: false,
@@ -85,7 +50,7 @@
 		nextId: null,
 		childIds: []
 	};
-	
+
 	// Get list of conversations for the sidebar
 	$: conversationList = Object.keys(conversations).map(convId => ({
 		id: convId,
@@ -93,6 +58,21 @@
 		lastMessage: getLastMessage(conversations[convId]),
 		createdAt: getConversationCreatedAt(conversations[convId])
 	})).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+	
+
+	
+
+	
+	// Debug logging
+	$: console.log('Current conversation state:', {
+		currentConversationId,
+		currentNodeId,
+		currentChatTreeSize: Object.keys(currentChatTree).length,
+		messages: messages.length,
+		totalConversations: Object.keys(conversations).length
+	});
+	
+
 
 	// Load chat history from database
 	async function loadChatHistory() {
@@ -111,26 +91,513 @@
 						conversations[conversation.id] = {};
 					}
 				});
-				
+
 				console.log('Converted conversations to trees:', conversations);
-				
-				// Restore previously active conversation/node if available
-				if (!hasAppliedRestore && restoredConversationId && conversations[restoredConversationId]) {
-					hasAppliedRestore = true;
-					currentConversationId = restoredConversationId;
-					if (restoredNodeId && conversations[restoredConversationId][restoredNodeId]) {
-						currentNodeId = restoredNodeId;
-						console.log('Restored node:', currentNodeId);
-					} else {
-						const nodes = Object.values(conversations[restoredConversationId]).sort((a, b) =>
-							new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-						);
-						currentNodeId = nodes.length > 0 ? nodes[nodes.length - 1].id : null;
-					}
-				} else if (!currentConversationId && Object.keys(conversations).length > 0) {
-					// Default: first conversation and its sensible node (latest assistant or its user)
+
+				// Set current conversation to the first one if none selected
+				if (!currentConversationId && Object.keys(conversations).length > 0) {
 					currentConversationId = Object.keys(conversations)[0];
-					currentNodeId = getDefaultNodeIdForConversation(conversations[currentConversationId]);
+					console.log('Set current conversation to:', currentConversationId);
+				}
+			} else {
+				console.error('Failed to load chat history');
+			}
+		} catch (error) {
+			console.error('Error loading chat history:', error);
+		}
+	}
+	
+
+
+	// Start a new conversation
+	function startNewChat() {
+		const newConversationId = crypto.randomUUID();
+		conversations[newConversationId] = {};
+		currentConversationId = newConversationId;
+		currentNodeId = null;
+		showHistory = false;
+		editingMessageId = null;
+		editingContent = '';
+		console.log('Started new conversation:', newConversationId);
+	}
+
+	// Load a specific conversation
+	function loadConversation(conversationId: string) {
+		console.log('Loading conversation:', conversationId);
+
+		if (conversations[conversationId]) {
+			currentConversationId = conversationId;
+			// Find the root message of this conversation
+			const rootMessage = Object.values(conversations[conversationId]).find(node =>
+				node.parentId === null
+			);
+			currentNodeId = rootMessage ? rootMessage.id : null;
+
+			showHistory = false;
+			editingMessageId = null;
+			editingContent = '';
+		}
+	}
+
+	// Load a specific branch
+	function loadBranch(branchId: string) {
+		if (currentChatTree[branchId]) {
+			currentNodeId = branchId;
+			showHistory = false;
+			editingMessageId = null;
+			editingContent = '';
+			console.log('Loaded branch:', branchId);
+		}
+	}
+
+
+
+	// Restore the full conversation when going back to the original
+	function restoreFullConversation() {
+		if (currentConversationId) {
+			const rootMessage = Object.values(currentChatTree).find(node =>
+				node.parentId === null
+			);
+			if (rootMessage) {
+				currentNodeId = rootMessage.id;
+				console.log('Restored to root conversation:', rootMessage.id);
+			}
+		}
+	}
+
+	// Flatten a conversation tree to linear array (for backward compatibility)
+	function flattenConversation(conversation: ChatTreeNode): any[] {
+		console.log('Flattening conversation:', conversation);
+		const result: any[] = [];
+
+		function traverse(node: ChatTreeNode) {
+			console.log('Traversing node:', { id: node.id, role: node.role, content: node.content?.substring(0, 50) });
+			const messageObj = {
+				id: node.id,
+				role: node.role,
+				content: node.content,
+				createdAt: node.createdAt,
+				isEdited: node.isEdited,
+				version: node.version
+			};
+			console.log('Created message object:', messageObj);
+			result.push(messageObj);
+
+			if (node.children && node.children.length > 0) {
+				node.children.forEach(child => traverse(child));
+			}
+		}
+
+		traverse(conversation);
+		console.log('Final flattened result:', result);
+		return result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+	}
+
+	// Start editing a user message
+	function startEditing(message: any) {
+		console.log('startEditing called with message:', message);
+		console.log('Message keys:', Object.keys(message));
+		console.log('Message ID:', message.id);
+		console.log('Message role:', message.role);
+		console.log('Message content:', message.content);
+		
+		// Check if this is a temporary message (not saved to database yet)
+		if (message.id && message.id.startsWith('temp-')) {
+			console.log('Cannot edit temporary message - wait for it to be saved to database');
+			alert('Please wait for the message to be saved before editing. Try again in a moment.');
+			return;
+		}
+		
+		if (message.role === 'user') {
+			editingMessageId = message.id;
+			editingContent = message.content;
+			console.log('Editing message ID set to:', editingMessageId);
+			console.log('Editing content set to:', editingContent);
+		} else {
+			console.log('Cannot edit non-user message');
+		}
+	}
+
+	// Cancel editing
+	function cancelEditing() {
+		editingMessageId = null;
+		editingContent = '';
+	}
+
+	// Save edited message
+	async function saveEditedMessage(message: any) {
+		console.log('saveEditedMessage called with message:', message);
+		console.log('Current editingMessageId:', editingMessageId);
+		console.log('Current editingContent:', editingContent);
+
+		if (!editingContent.trim() || editingContent === message.content) {
+			console.log('No changes or empty content, canceling edit');
+			cancelEditing();
+			return;
+		}
+
+		try {
+			isLoading = true;
+
+			// Call the edit API to create a new branch
+			console.log('Calling edit API with:', { messageId: editingMessageId, newContent: editingContent });
+			const response = await fetch('/api/chat', {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					messageId: editingMessageId,
+					newContent: editingContent
+				})
+			});
+
+			if (response.ok) {
+				// Reload chat history to get the updated tree structure
+				await loadChatHistory();
+
+				// Navigate to the new branch
+				// The API creates a new message and AI response, so we need to find the new AI message
+				const newAIMessage = Object.values(currentChatTree).find(node =>
+					node.role === 'assistant' &&
+					node.parentId === editingMessageId &&
+					node.content.includes(editingContent)
+				);
+
+				if (newAIMessage) {
+					currentNodeId = newAIMessage.id;
+					console.log('Navigated to new AI response:', newAIMessage.id);
+				}
+
+				cancelEditing();
+			} else {
+				const error = await response.text();
+				console.error('Failed to edit message:', error);
+				alert('Failed to edit message. Please try again.');
+			}
+		} catch (error) {
+			console.error('Error editing message:', error);
+			alert('Error editing message. Please try again.');
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	async function handleChatSubmit(event: Event) {
+		event.preventDefault();
+		console.log('handleChatSubmit called with input:', input.trim());
+
+		if (input.trim() && !isLoading) {
+			const userMessage = input.trim();
+			input = '';
+
+			try {
+				isLoading = true;
+
+				// Generate conversation ID if this is a new chat
+				let conversationId = currentConversationId;
+				if (!conversationId) {
+					conversationId = crypto.randomUUID();
+					conversations[conversationId] = {};
+					currentConversationId = conversationId;
+					console.log('Generated new conversation ID:', conversationId);
+				}
+
+				// Call the API to send the message
+				const response = await fetch('/api/chat', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						messages: [{ role: 'user', content: userMessage }],
+						parentId: currentNodeId,
+						conversationId: conversationId
+					}),
+				});
+
+				if (response.ok) {
+					// Reload chat history to get the updated tree structure
+					await loadChatHistory();
+
+					// Navigate to the latest AI response
+					const latestAIMessage = Object.values(currentChatTree).find(node =>
+						node.role === 'assistant' &&
+						node.parentId &&
+						currentChatTree[node.parentId]?.content === userMessage
+					);
+
+					if (latestAIMessage) {
+						currentNodeId = latestAIMessage.id;
+						console.log('Navigated to latest AI response:', latestAIMessage.id);
+					}
+				} else {
+					const error = await response.text();
+					console.error('Chat API error:', error);
+					alert('Failed to send message. Please try again.');
+				}
+			} catch (error) {
+				console.error('Chat error:', error);
+				alert('Error sending message. Please try again.');
+			} finally {
+				isLoading = false;
+			}
+		}
+	}
+
+	// Navigation functions
+	function goToPreviousBranch() {
+		if (currentNodeId) {
+			const parentId = goToParent(currentChatTree, currentNodeId);
+			if (parentId) {
+				currentNodeId = parentId;
+				console.log('Navigated to parent:', parentId);
+			}
+		}
+	}
+
+	function goToNextBranch() {
+		if (currentNodeId) {
+			const nextId = goToNext(currentChatTree, currentNodeId);
+			if (nextId) {
+				currentNodeId = nextId;
+				console.log('Navigated to next:', nextId);
+			}
+		}
+	}
+
+	// Load chat history on mount
+	onMount(() => {
+		loadChatHistory();
+	});
+
+	// Auto-scroll to bottom when messages change
+	$: if (messages.length > 0) {
+		setTimeout(() => {
+			const chatContainer = document.getElementById('chat-container');
+			if (chatContainer) {
+				chatContainer.scrollTop = chatContainer.scrollHeight;
+			}
+		}, 100);
+	}
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+<svelte:head>
+	<title>Chatbot - AuthFlow Dashboard</title>
+</svelte:head>
+										// If they exist, update the IDs; if not, keep the temporary ones for now
+										const realUserMessage = Object.values(conversations[currentConversationId]).find((msg: any) => 
+											msg.role === 'user' && 
+											msg.content === userMessage &&
+											!msg.id.startsWith('temp-') &&
+											msg.conversationId === currentConversationId
+										);
+										
+										const realAIMessage = Object.values(conversations[currentConversationId]).find((msg: any) => 
+											msg.role === 'assistant' && 
+											msg.content === currentStreamingMessage &&
+											!msg.id.startsWith('temp-') &&
+											msg.conversationId === currentConversationId
+										);
+										
+										if (realUserMessage && realAIMessage) {
+											// Update current node to real AI message
+											currentNodeId = realAIMessage.id;
+											console.log('Found real IDs - User:', realUserMessage.id, 'AI:', realAIMessage.id);
+										} else {
+											console.log('Real IDs not found yet, keeping temporary IDs for now');
+											console.log('This is normal - the database might need more time to update');
+											
+											// Instead of reloading all conversations (which overwrites our current state),
+											// we'll make a targeted API call to get just the current conversation's messages
+											setTimeout(async () => {
+												console.log('Attempting to get updated conversation data...');
+												
+												try {
+													// Make a targeted API call to get just this conversation's messages
+													const response = await fetch(`/api/chat?conversationId=${currentConversationId}`);
+													if (response.ok) {
+														const conversationMessages = await response.json();
+														console.log('Got updated conversation messages:', conversationMessages);
+														
+														// Find the real messages in the updated data
+														const refreshedUserMessage = conversationMessages.find((msg: any) => 
+															msg.role === 'user' && 
+															msg.content === userMessage &&
+															!msg.id.startsWith('temp-') &&
+															msg.conversationId === currentConversationId
+														);
+														
+														const refreshedAIMessage = conversationMessages.find((msg: any) => 
+															msg.role === 'assistant' && 
+															msg.content === currentStreamingMessage &&
+															!msg.id.startsWith('temp-') &&
+															msg.conversationId === currentConversationId
+														);
+														
+														if (refreshedUserMessage && refreshedAIMessage) {
+															// Update the conversation tree with real IDs while preserving current state
+															conversations[currentConversationId] = {
+																...conversations[currentConversationId],
+																[refreshedUserMessage.id]: {
+																	...conversations[currentConversationId][tempUserMessageId],
+																	id: refreshedUserMessage.id
+																},
+																[refreshedAIMessage.id]: {
+																	...conversations[currentConversationId][tempAIMessageId],
+																	id: refreshedAIMessage.id,
+																	parentId: refreshedUserMessage.id
+																}
+															};
+															
+															// Remove temporary messages
+															delete conversations[currentConversationId][tempUserMessageId];
+															delete conversations[currentConversationId][tempAIMessageId];
+															
+															// Update current node to real AI message
+															currentNodeId = refreshedAIMessage.id;
+															
+															console.log('Successfully updated with real IDs:', refreshedUserMessage.id, refreshedAIMessage.id);
+															console.log('Updated conversation tree:', conversations[currentConversationId]);
+															
+															// Force reactivity
+															conversations = { ...conversations };
+														} else {
+															console.log('Real messages still not found in database');
+														}
+													} else {
+														console.log('Failed to get updated conversation data');
+													}
+												} catch (error) {
+													console.error('Error getting updated conversation data:', error);
+												}
+											}, 2000); // Wait 2 seconds before attempting refresh
+										}
+										
+										break;
+									}
+									
+									try {
+										const parsed = JSON.parse(data);
+										if (parsed.chunk) {
+											currentStreamingMessage += parsed.chunk;
+											// Update streaming content in conversation tree
+											if (conversations[currentConversationId][tempAIMessageId]) {
+												conversations[currentConversationId][tempAIMessageId].content = currentStreamingMessage;
+												// Trigger reactivity
+												conversations[currentConversationId] = { ...conversations[currentConversationId] };
+											}
+										}
+									} catch (e) {
+										console.error('Error parsing chunk:', e);
+									}
+								}
+							}
+						}
+					}
+				} else {
+					const error = await response.text();
+					console.error('API error response:', error);
+					
+					// Create error message in conversation tree
+					const errorMessageId = 'temp-error-' + Date.now();
+					conversations[currentConversationId] = {
+						...conversations[currentConversationId],
+						[errorMessageId]: {
+							id: errorMessageId,
+							parentId: tempUserMessageId,
+							conversationId: currentConversationId,
+							role: 'assistant',
+							content: `Error: ${error || 'Failed to get response'}`,
+							isEdited: false,
+							originalContent: null,
+							version: 1,
+							isActive: true,
+							branchOrder: (conversations[currentConversationId][tempUserMessageId]?.branchOrder || 0) + 1,
+							createdAt: new Date(),
+							children: []
+						}
+					};
+					
+					// Add error message as child of user message
+					if (conversations[currentConversationId][tempUserMessageId]) {
+						conversations[currentConversationId][tempUserMessageId].children.push(errorMessageId);
+						// Trigger reactivity
+						conversations[currentConversationId] = { ...conversations[currentConversationId] };
+					}
+					
+					// Update current node to error message
+					currentNodeId = errorMessageId;
+				}
+			} catch (error) {
+				console.error('Chat error:', error);
+				
+				// Create error message in conversation tree
+				const errorMessageId = 'temp-error-' + Date.now();
+				conversations[currentConversationId] = {
+					...conversations[currentConversationId],
+					[errorMessageId]: {
+						id: errorMessageId,
+						parentId: tempUserMessageId,
+						conversationId: currentConversationId,
+						role: 'assistant',
+						content: 'Sorry, I encountered an error. Please try again.',
+						isEdited: false,
+						originalContent: null,
+						version: 1,
+						isActive: true,
+						branchOrder: (conversations[currentConversationId][tempUserMessageId]?.branchOrder || 0) + 1,
+						createdAt: new Date(),
+						children: []
+					}
+				};
+				
+				// Add error message as child of user message
+				if (conversations[currentConversationId][tempUserMessageId]) {
+					conversations[currentConversationId][tempUserMessageId].children.push(errorMessageId);
+					// Trigger reactivity
+					conversations[currentConversationId] = { ...conversations[currentConversationId] };
+				}
+				
+				// Update current node to error message
+				currentNodeId = errorMessageId;
+			} finally {
+				isLoading = false;
+				currentStreamingMessage = '';
+			}
+		}
+	}
+
+	// Load chat history from database
+	async function loadChatHistory() {
+		try {
+			const response = await fetch('/api/chat');
+			if (response.ok) {
+				const conversationsWithMessages = await response.json();
+				console.log('Loaded conversations from DB:', conversationsWithMessages);
+
+				// Convert each conversation's messages to a tree
+				conversations = {};
+				conversationsWithMessages.forEach((conversation: any) => {
+					if (conversation.messages && conversation.messages.length > 0) {
+						conversations[conversation.id] = dbChatsToTree(conversation.messages);
+					} else {
+						conversations[conversation.id] = {};
+					}
+				});
+
+				console.log('Converted conversations to trees:', conversations);
+
+				// Set current conversation to the first one if none selected
+				if (!currentConversationId && Object.keys(conversations).length > 0) {
+					currentConversationId = Object.keys(conversations)[0];
 					console.log('Set current conversation to:', currentConversationId);
 				}
 			} else {
@@ -156,13 +623,15 @@
 	// Load a specific conversation
 	function loadConversation(conversationId: string) {
 		console.log('Loading conversation:', conversationId);
-		
+
 		if (conversations[conversationId]) {
 			currentConversationId = conversationId;
-			// Choose best initial node for this conversation
-			const defaultNode = getDefaultNodeIdForConversation(conversations[conversationId]);
-			currentNodeId = defaultNode;
-			
+			// Find the root message of this conversation
+			const rootMessage = Object.values(conversations[conversationId]).find(node =>
+				node.parentId === null
+			);
+			currentNodeId = rootMessage ? rootMessage.id : null;
+
 			showHistory = false;
 			editingMessageId = null;
 			editingContent = '';
@@ -172,7 +641,7 @@
 	// Start editing a user message
 	function startEditing(message: any) {
 		console.log('startEditing called with message:', message);
-		
+
 		if (message.role === 'user') {
 			editingMessageId = message.id;
 			editingContent = message.content;
@@ -190,7 +659,7 @@
 	// Save edited message
 	async function saveEditedMessage(message: any) {
 		console.log('saveEditedMessage called with message:', message);
-		
+
 		if (!editingContent.trim() || editingContent === message.content) {
 			console.log('No changes or empty content, canceling edit');
 			cancelEditing();
@@ -199,8 +668,8 @@
 
 		try {
 			isLoading = true;
-			
-			// Call the edit API to create a new branch with streaming
+
+			// Call the edit API to create a new branch
 			console.log('Calling edit API with:', { messageId: editingMessageId, newContent: editingContent });
 			const response = await fetch('/api/chat', {
 				method: 'PUT',
@@ -212,92 +681,23 @@
 			});
 
 			if (response.ok) {
-				// Handle streaming response from edit API
-				const reader = response.body?.getReader();
-					const decoder = new TextDecoder();
-				let accumulatedResponse = '';
-					
-				if (reader) {
-					try {
-					while (true) {
-						const { done, value } = await reader.read();
-						if (done) break;
-						
-						const chunk = decoder.decode(value);
-						const lines = chunk.split('\n');
-						
-						for (const line of lines) {
-							if (line.startsWith('data: ')) {
-								const data = line.slice(6);
-								if (data === '[DONE]') {
-										// Streaming complete, reload chat history
-										console.log('Edit streaming complete, reloading chat history...');
-									await loadChatHistory();
-										console.log('Chat history reloaded after edit, current tree size:', Object.keys(currentChatTree).length);
+				// Reload chat history to get the updated tree structure
+				await loadChatHistory();
 
-										// Navigate to the new branch
-										// Find the new user message first (the edited one)
-										const newUserMessage = Object.values(currentChatTree).find(node =>
-											node.role === 'user' &&
-											node.content === editingContent &&
-											node.isEdited === true
-										);
+				// Navigate to the new branch
+				// The API creates a new message and AI response, so we need to find the new AI message
+				const newAIMessage = Object.values(currentChatTree).find(node =>
+					node.role === 'assistant' &&
+					node.parentId === editingMessageId &&
+					node.content.includes(editingContent)
+				);
 
-										if (newUserMessage) {
-											// Then find the AI response that has this new user message as parent
-											const newAIMessage = Object.values(currentChatTree).find(node =>
-												node.role === 'assistant' &&
-												node.parentId === newUserMessage.id
-											);
-
-											if (newAIMessage) {
-												currentNodeId = newAIMessage.id;
-												console.log('Navigated to new AI response after edit:', newAIMessage.id);
-											} else {
-												// If no AI response found, navigate to the new user message
-												currentNodeId = newUserMessage.id;
-												console.log('Navigated to new user message (no AI response yet):', newUserMessage.id);
-											}
-
-											// Ensure we stay in the same conversation and persist selection
-											currentConversationId = newUserMessage.conversationId;
-											saveUIState();
-											// Do not auto-scroll here; user is focused on this context
-
-										} else {
-											console.log('No new user message found after edit');
-											console.log('Available messages:', Object.values(currentChatTree).map(m => ({
-												role: m.role,
-												content: m.content.substring(0, 50),
-												isEdited: m.isEdited
-											})));
-									}
-									
-									cancelEditing();
-									break;
-									} else {
-								try {
-									const parsed = JSON.parse(data);
-									if (parsed.chunk) {
-												accumulatedResponse += parsed.chunk;
-												console.log('Received edit chunk:', parsed.chunk);
-									}
-								} catch (e) {
-											console.log('Failed to parse edit chunk data:', data, e);
-										}
-									}
-								}
-							}
-						}
-					} finally {
-						reader.releaseLock();
-					}
-				} else {
-					// Fallback: reload chat history if streaming fails
-					console.log('No reader available, falling back to direct reload');
-					await loadChatHistory();
-					cancelEditing();
+				if (newAIMessage) {
+					currentNodeId = newAIMessage.id;
+					console.log('Navigated to new AI response:', newAIMessage.id);
 				}
+
+				cancelEditing();
 			} else {
 				const error = await response.text();
 				console.error('Failed to edit message:', error);
@@ -313,15 +713,16 @@
 
 	async function handleChatSubmit(event: Event) {
 		event.preventDefault();
-		
+		console.log('handleChatSubmit called with input:', input.trim());
+
 		if (input.trim() && !isLoading) {
 			const userMessage = input.trim();
 			input = '';
-			
+
 			try {
 				isLoading = true;
-			
-			// Generate conversation ID if this is a new chat
+
+				// Generate conversation ID if this is a new chat
 				let conversationId = currentConversationId;
 				if (!conversationId) {
 					conversationId = crypto.randomUUID();
@@ -330,11 +731,11 @@
 					console.log('Generated new conversation ID:', conversationId);
 				}
 
-				// Call the API to send the message with streaming
+				// Call the API to send the message
 				const response = await fetch('/api/chat', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ 
+					body: JSON.stringify({
 						messages: [{ role: 'user', content: userMessage }],
 						parentId: currentNodeId,
 						conversationId: conversationId
@@ -342,85 +743,26 @@
 				});
 
 				if (response.ok) {
-					// Handle streaming response
-					const reader = response.body?.getReader();
-						const decoder = new TextDecoder();
-					let accumulatedResponse = '';
-						
-					if (reader) {
-						try {
-						while (true) {
-							const { done, value } = await reader.read();
-							if (done) break;
-							
-							const chunk = decoder.decode(value);
-							const lines = chunk.split('\n');
-							
-							for (const line of lines) {
-								if (line.startsWith('data: ')) {
-									const data = line.slice(6);
-									if (data === '[DONE]') {
-											// Streaming complete, reload chat history
-											console.log('Streaming complete, reloading chat history...');
-											autoScrollRequested = true;
-											await loadChatHistory();
-											console.log('Chat history reloaded, current tree size:', Object.keys(currentChatTree).length);
+					// Reload chat history to get the updated tree structure
+					await loadChatHistory();
 
-											// Navigate to the latest AI response
-											const latestAIMessage = Object.values(currentChatTree).find(node =>
-												node.role === 'assistant' &&
-												node.parentId &&
-												currentChatTree[node.parentId]?.content === userMessage
-											);
+					// Navigate to the latest AI response
+					const latestAIMessage = Object.values(currentChatTree).find(node =>
+						node.role === 'assistant' &&
+						node.parentId &&
+						currentChatTree[node.parentId]?.content === userMessage
+					);
 
-											if (latestAIMessage) {
-												currentNodeId = latestAIMessage.id;
-												console.log('Navigated to latest AI response:', latestAIMessage.id, 'Content:', latestAIMessage.content.substring(0, 100));
-										} else {
-												console.log('No AI response found for user message:', userMessage);
-												console.log('Available messages:', Object.values(currentChatTree).map(m => ({ role: m.role, content: m.content.substring(0, 50), parentId: m.parentId })));
-											}
-										break;
-										} else {
-									try {
-										const parsed = JSON.parse(data);
-										if (parsed.chunk) {
-													accumulatedResponse += parsed.chunk;
-													console.log('Received chunk:', parsed.chunk);
-													console.log('Accumulated response so far:', accumulatedResponse);
-										}
-									} catch (e) {
-												console.log('Failed to parse chunk data:', data, e);
-									}
-								}
-							}
-						}
-							}
-						} finally {
-							reader.releaseLock();
+					if (latestAIMessage) {
+						currentNodeId = latestAIMessage.id;
+						console.log('Navigated to latest AI response:', latestAIMessage.id);
 					}
-										} else {
-						// Fallback: reload chat history if streaming fails
-						await loadChatHistory();
-
-						// Navigate to the latest AI response
-						const latestAIMessage = Object.values(currentChatTree).find(node =>
-							node.role === 'assistant' &&
-							node.parentId &&
-							currentChatTree[node.parentId]?.content === userMessage
-						);
-
-						if (latestAIMessage) {
-							currentNodeId = latestAIMessage.id;
-							console.log('Navigated to latest AI response:', latestAIMessage.id);
-						}
-														}
-													} else {
+				} else {
 					const error = await response.text();
 					console.error('Chat API error:', error);
 					alert('Failed to send message. Please try again.');
-													}
-												} catch (error) {
+				}
+			} catch (error) {
 				console.error('Chat error:', error);
 				alert('Error sending message. Please try again.');
 			} finally {
@@ -433,7 +775,7 @@
 	function goToPreviousBranch() {
 		if (currentNodeId) {
 			const parentId = goToParent(currentChatTree, currentNodeId);
-			if (parentId && currentChatTree[parentId] && currentChatTree[parentId].conversationId === currentConversationId) {
+			if (parentId) {
 				currentNodeId = parentId;
 				console.log('Navigated to parent:', parentId);
 			}
@@ -443,122 +785,27 @@
 	function goToNextBranch() {
 		if (currentNodeId) {
 			const nextId = goToNext(currentChatTree, currentNodeId);
-			if (nextId && currentChatTree[nextId] && currentChatTree[nextId].conversationId === currentConversationId) {
+			if (nextId) {
 				currentNodeId = nextId;
 				console.log('Navigated to next:', nextId);
 			}
 		}
 	}
 
-	// Version navigation functions (ChatGPT-style)
-	function getAssistantChildId(messageId: string): string | null {
-		const node = currentChatTree[messageId];
-		if (!node) return null;
-		const assistantChildren = node.children
-			.map((id) => currentChatTree[id])
-			.filter((n) => n && n.role === 'assistant')
-			.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-		return assistantChildren.length > 0 ? assistantChildren[0].id : null;
-	}
-
-	// Prefer the latest assistant in the subtree; if none, fallback to latest leaf
-	function getLatestAssistantInSubtree(tree: ChatTree, startId: string): string {
-		let currentId = startId;
-		let lastAssistantId: string | null = tree[currentId]?.role === 'assistant' ? currentId : null;
-		while (true) {
-			const node = tree[currentId];
-			if (!node || node.children.length === 0) break;
-			const sortedChildren = node.children
-				.map((id) => tree[id])
-				.filter((n) => n)
-				.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-			const latestChild = sortedChildren[sortedChildren.length - 1];
-			if (latestChild.role === 'assistant') lastAssistantId = latestChild.id;
-			currentId = latestChild.id;
-		}
-		return lastAssistantId ?? currentId;
-	}
-
-	function getDefaultNodeIdForConversation(tree: ChatTree): string | null {
-		const nodes = Object.values(tree).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-		if (nodes.length === 0) return null;
-		// Prefer the latest assistant message
-		for (let i = nodes.length - 1; i >= 0; i--) {
-			if (nodes[i].role === 'assistant') return getLatestAssistantInSubtree(tree, nodes[i].id);
-		}
-		// Else pick last user message's assistant child if present
-		const last = nodes[nodes.length - 1];
-		if (last.role === 'user') {
-			const child = last.children
-				.map((id) => tree[id])
-				.find((n) => n && n.role === 'assistant');
-			if (child) return getLatestAssistantInSubtree(tree, child.id);
-		}
-		// Fallback to the latest assistant or the last node
-		return getLatestAssistantInSubtree(tree, last.id);
-	}
-
-	function navigateToPreviousVersion(messageId: string) {
-		console.log('Attempting to navigate to previous version of:', messageId);
-		const previousVersionId = goToPreviousVersion(currentChatTree, messageId);
-		console.log('Previous version ID:', previousVersionId);
-		if (previousVersionId) {
-			const assistantId = getAssistantChildId(previousVersionId);
-			const targetId = assistantId ?? previousVersionId;
-			currentNodeId = getLatestAssistantInSubtree(currentChatTree, targetId);
-			console.log('Successfully navigated to previous version:', currentNodeId);
-			// Trigger reactive update
-			currentNodeId = currentNodeId;
-		} else {
-			console.log('No previous version available for message:', messageId);
-		}
-	}
-
-	function navigateToNextVersion(messageId: string) {
-		console.log('Attempting to navigate to next version of:', messageId);
-		const nextVersionId = goToNextVersion(currentChatTree, messageId);
-		console.log('Next version ID:', nextVersionId);
-		if (nextVersionId) {
-			const assistantId = getAssistantChildId(nextVersionId);
-			const targetId = assistantId ?? nextVersionId;
-			currentNodeId = getLatestAssistantInSubtree(currentChatTree, targetId);
-			console.log('Successfully navigated to next version:', currentNodeId);
-			// Trigger reactive update
-			currentNodeId = currentNodeId;
-		} else {
-			console.log('No next version available for message:', messageId);
-		}
-	}
-
-	function getMessageVersionInfo(messageId: string) {
-		const versionInfo = getVersionNavigationInfo(currentChatTree, messageId);
-		console.log('Version info for message', messageId, ':', versionInfo);
-		return versionInfo;
-	}
-
 	// Load chat history on mount
 	onMount(() => {
-		loadUIState();
 		loadChatHistory();
 	});
 
 	// Auto-scroll to bottom when messages change
 	$: if (messages.length > 0) {
-		if (autoScrollRequested) {
-			setTimeout(() => {
-				const chatContainer = document.getElementById('chat-container');
-				if (chatContainer) {
-					chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
-				}
-				autoScrollRequested = false;
-			}, 50);
-		}
+		setTimeout(() => {
+			const chatContainer = document.getElementById('chat-container');
+			if (chatContainer) {
+				chatContainer.scrollTop = chatContainer.scrollHeight;
+			}
+		}, 100);
 	}
-
-	// Save UI state on component destroy
-	onDestroy(() => {
-		saveUIState();
-	});
 </script>
 
 <svelte:head>
@@ -580,7 +827,7 @@
 							New Chat
 						</button>
 					</div>
-					<p class="text-sm text-gray-600">Your previous conversations</p>
+					<p class="text-sm text-gray-600">Your previous conversations and branches</p>
 				</div>
 				
 				<div class="flex-1 overflow-y-auto p-3 lg:p-4 space-y-3 max-h-64 lg:max-h-none">
@@ -588,7 +835,7 @@
 						<div class="text-center text-gray-500 py-6 lg:py-8">
 							<div class="w-12 h-12 lg:w-16 lg:h-16 mx-auto mb-3 lg:mb-4 bg-gray-100 rounded-full flex items-center justify-center">
 								<svg class="w-6 h-6 lg:w-8 lg:h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
 								</svg>
 							</div>
 							<p class="text-sm">No conversations yet</p>
@@ -596,6 +843,7 @@
 						</div>
 					{:else}
 						{#each conversationList as conversation}
+							<div class="space-y-2">
 								<button
 									on:click={() => loadConversation(conversation.id)}
 									class="w-full text-left p-2 lg:p-3 rounded-lg hover:bg-blue-50 transition-all duration-200 border-2 border-gray-100 hover:border-blue-200 hover:shadow-sm"
@@ -617,10 +865,37 @@
 											</p>
 											<p class="text-xs text-gray-400">
 												{new Date(conversation.createdAt).toLocaleDateString()}
+											</p>
+										</div>
+									</div>
+								</button>
+								
+								<!-- Show available branches for this conversation -->
+								{#if availableBranches.length > 0}
+									{#each availableBranches.filter(b => b && b.id && conversation && conversation.id && b.id.startsWith(conversation.id)) as branch}
+										<button
+											on:click={() => loadBranch(branch.id)}
+											class="w-full text-left p-1 lg:p-2 rounded-lg hover:bg-purple-50 transition-all duration-200 text-xs lg:text-sm border-2 border-gray-100 hover:border-purple-200 hover:shadow-sm ml-3 lg:ml-6"
+										>
+											<div class="flex items-start space-x-2">
+												<div class="w-4 h-4 lg:w-6 lg:h-6 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+													<svg class="w-2 h-2 lg:w-3 lg:h-3 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+													</svg>
+												</div>
+												<div class="flex-1 min-w-0">
+													<p class="text-xs lg:text-sm text-gray-700 truncate">
+														Branch v{branch.id && branch.id.includes('-v') ? branch.id.split('-v')[1] : '1'}
+													</p>
+													<p class="text-xs text-gray-500">
+														{branch.createdAt ? new Date(branch.createdAt).toLocaleDateString() : 'Unknown date'}
 													</p>
 												</div>
 											</div>
 										</button>
+									{/each}
+								{/if}
+							</div>
 						{/each}
 					{/if}
 				</div>
@@ -674,7 +949,6 @@
 								disabled={!navigationInfo.hasParent}
 								class="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
 								title="Go to parent message"
-								aria-label="Navigate to parent message in conversation tree"
 							>
 								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
@@ -690,7 +964,6 @@
 								disabled={!navigationInfo.hasNext}
 								class="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
 								title="Go to next message"
-								aria-label="Navigate to next message in conversation tree"
 							>
 								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
@@ -698,12 +971,7 @@
 							</button>
 							
 							<button
-								on:click={() => {
-									const rootMessage = Object.values(currentChatTree).find(node => node.parentId === null);
-									if (rootMessage) {
-										currentNodeId = rootMessage.id;
-									}
-								}}
+								on:click={restoreFullConversation}
 								class="px-3 py-1.5 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors font-medium"
 								title="Back to full conversation"
 							>
@@ -749,11 +1017,15 @@
 									I'm powered by Google's latest Gemini 2.0 Flash model for the best possible responses.
 								</p>
 							</div>
+							<div class="mt-4 p-2 bg-red-100 rounded text-xs">
+								<strong>Debug:</strong> Tree has {Object.keys(currentChatTree).length} nodes but no display messages
 							</div>
-					{:else}
+						</div>
+					{/if}
+
 					{#each displayMessages as message}
 						<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
-								<div class="max-w-xs sm:max-w-md lg:max-w-2xl px-3 lg:px-6 py-3 lg:py-4 rounded-2xl {message.role === 'user' ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-gray-800 border-2 border-gray-100 shadow-sm hover:shadow-md transition-shadow'}">
+							<div class="max-w-xs sm:max-w-md lg:max-w-2xl px-3 lg:px-6 py-3 lg:py-4 rounded-2xl {message.role === 'user' ? 'bg-blue-600 text-white shadow-lg' : message.isError ? 'bg-red-50 text-red-800 border-2 border-red-200' : 'bg-white text-gray-800 border-2 border-gray-100 shadow-sm hover:shadow-md transition-shadow'}">
 								{#if message.role === 'user'}
 									<div class="flex items-center space-x-2 lg:space-x-3 mb-2">
 										<div class="w-6 h-6 lg:w-8 lg:h-8 bg-white/20 rounded-full flex items-center justify-center">
@@ -808,20 +1080,21 @@
 											<div class="text-sm lg:text-base leading-relaxed whitespace-pre-wrap text-white font-medium">
 												{message.content}
 											</div>
-												{#if message.isEdited}
-													<div class="mt-2 flex items-center space-x-2">
-														<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-500/20 text-orange-300 border border-orange-500/30">
-															<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-															</svg>
-															Edited v{message.version || 1}
-														</span>
-													</div>
-												{/if}
 										</div>
 										
 										<div class="mt-2 lg:mt-3 pt-2 lg:pt-3 border-t border-white/30 flex items-center justify-between">
-												{#if message.id && !message.id.startsWith('temp-')}
+											{#if message.id && message.id.startsWith('temp-')}
+												<button
+													disabled
+													class="text-xs text-white/50 font-medium flex items-center space-x1 px-1.5 lg:px-2 py-1 rounded cursor-not-allowed"
+													title="Wait for message to be saved before editing"
+												>
+													<svg class="w-2.5 h-2.5 lg:w-3 lg:h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+													</svg>
+													<span>Saving...</span>
+												</button>
+											{:else}
 												<div class="flex items-center space-x-2">
 													<button
 														on:click={() => startEditing(message)}
@@ -833,38 +1106,31 @@
 														<span>Edit</span>
 													</button>
 													
-														<!-- Version navigation arrows (ChatGPT-style) -->
-														{#if message.role === 'user'}
-															{@const versionInfo = getMessageVersionInfo(message.id)}
-															{#if versionInfo.hasVersions}
-																<div class="flex items-center space-x-2 ml-3 px-2 py-1 bg-white/10 rounded-lg border border-white/20">
+													<!-- Navigation arrows for edited messages -->
+													{#if message.isEdited && navigationInfo.hasParent}
+														<div class="flex items-center space-x-1 ml-2">
 															<button
-																		on:click={() => navigateToPreviousVersion(message.id)}
-																		disabled={!versionInfo.canGoToPrevious}
-																		class="text-xs text-white/80 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed font-medium flex items-center space-x-1 hover:bg-white/20 px-1.5 py-1 rounded transition-colors"
-																		title="Previous version"
-																		aria-label="Go to previous version of this message"
+																on:click={goToPreviousBranch}
+																class="text-xs text-white/70 hover:text-white font-medium flex items-center space-x-1 hover:bg-white/20 px-1.5 py-1 rounded transition-colors"
+																title="Go to parent message"
 															>
 																<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
 																</svg>
 															</button>
-																	<span class="text-xs text-white/80 font-semibold px-2 bg-white/10 rounded border border-white/20">
-																		{versionInfo.currentVersion} / {versionInfo.totalVersions}
+															<span class="text-xs text-white/50 px-1">
+																v{message.version || 1}
 															</span>
 															<button
-																		on:click={() => navigateToNextVersion(message.id)}
-																		disabled={!versionInfo.canGoToNext}
-																		class="text-xs text-white/80 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed font-medium flex items-center space-x-1 hover:bg-white/20 px-1.5 py-1 rounded transition-colors"
-																		title="Next version"
-																		aria-label="Go to next version of this message"
+																on:click={goToNextBranch}
+																class="text-xs text-white/70 hover:text-white font-medium flex items-center space-x-1 hover:bg-white/20 px-1.5 py-1 rounded transition-colors"
+																title="Go to next message"
 															>
 																<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
 																</svg>
 															</button>
 														</div>
-															{/if}
 													{/if}
 												</div>
 											{/if}
@@ -872,24 +1138,32 @@
 									{/if}
 								{:else}
 									<div class="flex items-center space-x-2 lg:space-x-3 mb-2">
-											<div class="w-6 h-6 lg:w-8 lg:h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+										<div class="w-6 h-6 lg:w-8 lg:h-8 {message.isError ? 'bg-red-100' : 'bg-gradient-to-br from-blue-500 to-purple-600'} rounded-full flex items-center justify-center">
+											{#if message.isError}
+												<svg class="w-3 h-3 lg:w-4 lg:h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+												</svg>
+											{:else}
 												<svg class="w-3 h-3 lg:w-4 lg:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
 												</svg>
+											{/if}
 										</div>
-											<span class="text-xs lg:text-sm font-semibold text-blue-600">AI Assistant</span>
+										<span class="text-xs lg:text-sm font-semibold {message.isError ? 'text-red-600' : 'text-blue-600'}">
+											{message.isError ? 'Error' : 'AI Assistant'}
+										</span>
 									</div>
 									<MessageRenderer 
 										content={message.content} 
-											isLoading={false}
-											isError={false}
+										isLoading={message.isLoading} 
+										isError={message.isError} 
 									/>
 								{/if}
 							</div>
 						</div>
 					{/each}
 
-						{#if isLoading}
+					{#if isLoading && currentStreamingMessage === ''}
 						<div class="flex justify-start">
 							<div class="max-w-xs sm:max-w-md lg:max-w-2xl px-3 lg:px-6 py-3 lg:py-4 rounded-2xl bg-white border-2 border-gray-100 shadow-sm hover:shadow-md transition-shadow">
 								<div class="flex items-center space-x-2 lg:space-x-3 mb-2">
@@ -910,7 +1184,6 @@
 								</div>
 							</div>
 						</div>
-						{/if}
 					{/if}
 				</div>
 			</div>

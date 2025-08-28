@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, boolean, varchar, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, boolean, varchar, primaryKey, integer } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // Users table
@@ -43,16 +43,26 @@ export const userProfiles = pgTable('user_profiles', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Chat messages table
+// Conversations table - separates conversations from individual messages
+export const conversations = pgTable('conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  title: text('title'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
+});
+
+// Chat messages table - updated for proper tree structure
 export const chats = pgTable('chats', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  conversationId: uuid('conversation_id')
+    .references(() => conversations.id, { onDelete: 'cascade' }),
   parentId: uuid('parent_id').references(() => chats.id, { onDelete: 'cascade' }),
   role: text('role', { enum: ['user', 'assistant'] }).notNull(),
   content: text('content').notNull(),
-  isEdited: boolean('is_edited').default(false),
-  originalContent: text('original_content'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  isEdited: boolean('is_edited').default(false),
+  version: integer('version').default(1),
 });
 
 // Relations
@@ -62,7 +72,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     references: [userProfiles.userId],
   }),
   sessions: many(sessions),
-  chats: many(chats),
+  conversations: many(conversations),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -79,10 +89,18 @@ export const userProfilesRelations = relations(userProfiles, ({ one }) => ({
   }),
 }));
 
-export const chatsRelations = relations(chats, ({ one, many }) => ({
+export const conversationsRelations = relations(conversations, ({ one, many }) => ({
   user: one(users, {
-    fields: [chats.userId],
+    fields: [conversations.userId],
     references: [users.id],
+  }),
+  chats: many(chats),
+}));
+
+export const chatsRelations = relations(chats, ({ one, many }) => ({
+  conversation: one(conversations, {
+    fields: [chats.conversationId],
+    references: [conversations.id],
   }),
   parent: one(chats, {
     fields: [chats.parentId],
@@ -103,5 +121,7 @@ export type VerificationToken = typeof verificationTokens.$inferSelect;
 export type NewVerificationToken = typeof verificationTokens.$inferInsert;
 export type UserProfile = typeof userProfiles.$inferSelect;
 export type NewUserProfile = typeof userProfiles.$inferInsert;
+export type Conversation = typeof conversations.$inferSelect;
+export type NewConversation = typeof conversations.$inferInsert;
 export type Chat = typeof chats.$inferSelect;
 export type NewChat = typeof chats.$inferInsert;

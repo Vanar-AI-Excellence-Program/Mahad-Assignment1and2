@@ -2,24 +2,35 @@ import type { Chat } from '$lib/db/schema';
 
 export interface ChatTreeNode extends Chat {
   children: ChatTreeNode[];
-  isEdited?: boolean;
-  originalContent?: string;
+  branches: ChatTreeNode[]; // Different conversation branches
+  version: number; // Version number for this message
+  isLatest: boolean; // Whether this is the latest version
+}
+
+export interface ConversationBranch {
+  id: string;
+  messages: ChatTreeNode[];
+  createdAt: Date;
+  isActive: boolean;
 }
 
 /**
- * Builds a tree structure from flat chat messages
+ * Builds a tree structure from flat chat messages with support for multiple branches
  * @param messages - Array of chat messages from database
- * @returns Tree-structured chat history
+ * @returns Tree-structured chat history with branches
  */
 export function buildChatTree(messages: Chat[]): ChatTreeNode[] {
   // Create a map for quick lookup
   const messageMap = new Map<string, ChatTreeNode>();
   
-  // Initialize all messages with empty children arrays
+  // Initialize all messages with empty children and branches arrays
   messages.forEach(msg => {
     messageMap.set(msg.id, {
       ...msg,
-      children: []
+      children: [],
+      branches: [],
+      version: 1,
+      isLatest: true
     });
   });
   
@@ -41,12 +52,18 @@ export function buildChatTree(messages: Chat[]): ChatTreeNode[] {
     }
   });
   
+  // Process branches and versions
+  processBranchesAndVersions(rootMessages);
+  
   // Sort messages chronologically at each level
   function sortMessages(nodes: ChatTreeNode[]): void {
     nodes.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     nodes.forEach(node => {
       if (node.children.length > 0) {
         sortMessages(node.children);
+      }
+      if (node.branches.length > 0) {
+        sortMessages(node.branches);
       }
     });
   }
@@ -57,50 +74,106 @@ export function buildChatTree(messages: Chat[]): ChatTreeNode[] {
 }
 
 /**
- * Gets all messages in a conversation branch starting from a specific message
- * @param messages - All user messages
- * @param startMessageId - ID of the message to start from
- * @returns Array of messages in the branch
+ * Processes branches and versions for each message
  */
-export function getConversationBranch(messages: Chat[], startMessageId: string): Chat[] {
-  const branch: Chat[] = [];
-  const messageMap = new Map<string, Chat>();
-  
-  // Build lookup map
-  messages.forEach(msg => messageMap.set(msg.id, msg));
-  
-  // Collect all messages in the branch
-  function collectBranch(messageId: string): void {
-    const message = messageMap.get(messageId);
-    if (message) {
-      branch.push(message);
+function processBranchesAndVersions(nodes: ChatTreeNode[]): void {
+  nodes.forEach(node => {
+    if (node.children.length > 0) {
+      // Group children by content similarity (different versions of the same message)
+      const contentGroups = new Map<string, ChatTreeNode[]>();
       
-      // Find all children of this message
-      messages.forEach(msg => {
-        if (msg.parentId === messageId) {
-          collectBranch(msg.id);
+      node.children.forEach(child => {
+        if (child.role === 'user') {
+          // For user messages, group by similar content (edited versions)
+          const key = child.content.substring(0, 50); // Use first 50 chars as key
+          if (!contentGroups.has(key)) {
+            contentGroups.set(key, []);
+          }
+          contentGroups.get(key)!.push(child);
+        } else {
+          // For AI messages, they go to the main children
+          contentGroups.set(child.id, [child]);
         }
       });
+      
+      // Process each content group
+      contentGroups.forEach((group, key) => {
+        if (group.length > 1 && group[0].role === 'user') {
+          // Multiple versions of the same user message
+          const sortedGroup = group.sort((a, b) => 
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+          
+          // Mark versions
+          sortedGroup.forEach((msg, index) => {
+            msg.version = index + 1;
+            msg.isLatest = index === sortedGroup.length - 1;
+          });
+          
+          // Create branches for each version
+          sortedGroup.forEach((msg, index) => {
+            if (index < sortedGroup.length - 1) {
+              // Create a branch for this version
+              const branch = createBranchFromVersion(msg, sortedGroup.slice(index + 1));
+              msg.branches.push(branch);
+            }
+          });
+          
+          // Keep only the latest version in main children
+          const latestVersion = sortedGroup[sortedGroup.length - 1];
+          node.children = node.children.filter(child => 
+            child.id !== latestVersion.id || child.role !== 'user'
+          );
+          node.children.push(latestVersion);
+        }
+      });
+      
+      // Recursively process children
+      processBranchesAndVersions(node.children);
+      
+      // Process branches
+      node.branches.forEach(branch => {
+        processBranchesAndVersions([branch]);
+      });
     }
-  }
-  
-  collectBranch(startMessageId);
-  
-  // Sort chronologically
-  return branch.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  });
 }
 
 /**
- * Flattens a tree structure back to a linear array
- * Useful for sending to AI models that expect flat conversation history
- * @param tree - Tree-structured chat history
- * @returns Flat array of messages
+ * Creates a branch from a specific version of a message
  */
-export function flattenChatTree(tree: ChatTreeNode[]): Chat[] {
+function createBranchFromVersion(version: ChatTreeNode, newerVersions: ChatTreeNode[]): ChatTreeNode {
+  const branch: ChatTreeNode = {
+    ...version,
+    children: [],
+    branches: [],
+    version: version.version,
+    isLatest: false
+  };
+  
+  // Add newer versions as children in the branch
+  newerVersions.forEach(newerVersion => {
+    branch.children.push({
+      ...newerVersion,
+      children: [],
+      branches: [],
+      version: newerVersion.version,
+      isLatest: newerVersion.isLatest
+    });
+  });
+  
+  return branch;
+}
+
+/**
+ * Gets the active conversation branch (latest versions)
+ */
+export function getActiveBranch(tree: ChatTreeNode[]): Chat[] {
   const result: Chat[] = [];
   
   function traverse(nodes: ChatTreeNode[]): void {
     nodes.forEach(node => {
+      // Add the message
       result.push({
         id: node.id,
         userId: node.userId,
@@ -112,6 +185,7 @@ export function flattenChatTree(tree: ChatTreeNode[]): Chat[] {
         createdAt: node.createdAt
       });
       
+      // Continue with children (latest versions)
       if (node.children.length > 0) {
         traverse(node.children);
       }
@@ -123,214 +197,189 @@ export function flattenChatTree(tree: ChatTreeNode[]): Chat[] {
 }
 
 /**
- * Gets the active branch of a conversation (latest edited version)
- * @param tree - Tree-structured chat history
- * @returns Array of messages representing the active branch
+ * Gets all available branches for a conversation
  */
-export function getActiveBranch(tree: ChatTreeNode[]): Chat[] {
-  const result: Chat[] = [];
+export function getAllBranches(tree: ChatTreeNode[]): ConversationBranch[] {
+  const branches: ConversationBranch[] = [];
   
-  function traverse(nodes: ChatTreeNode[]): void {
+  function collectBranches(nodes: ChatTreeNode[], parentPath: string = ''): void {
     nodes.forEach(node => {
-      // For user messages, check if there are edited versions
-      if (node.role === 'user' && node.children && node.children.length > 0) {
-        // Find the latest edited version (most recent child)
-        const editedVersions = node.children.filter(child => child.role === 'user');
-        if (editedVersions.length > 0) {
-          // Use the most recent edited version
-          const latestEdit = editedVersions.sort((a, b) => 
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          )[0];
+      if (node.branches.length > 0) {
+        node.branches.forEach(branch => {
+          const branchId = `${parentPath}${node.id}-v${branch.version}`;
+          const branchMessages = flattenBranch(branch);
           
-          result.push({
-            id: latestEdit.id,
-            userId: latestEdit.userId,
-            parentId: latestEdit.parentId,
-            role: latestEdit.role,
-            content: latestEdit.content,
-            isEdited: latestEdit.isEdited,
-            originalContent: latestEdit.originalContent,
-            createdAt: latestEdit.createdAt
+          branches.push({
+            id: branchId,
+            messages: branchMessages,
+            createdAt: branch.createdAt,
+            isActive: false
           });
-          
-          // Continue with children of the edited version
-          if (latestEdit.children && latestEdit.children.length > 0) {
-            traverse(latestEdit.children);
-          }
-        } else {
-          // No edited version, use original
-          result.push({
-            id: node.id,
-            userId: node.userId,
-            parentId: node.parentId,
-            role: node.role,
-            content: node.content,
-            isEdited: node.isEdited,
-            originalContent: node.originalContent,
-            createdAt: node.createdAt
-          });
-          
-          // Continue with original children
-          if (node.children && node.children.length > 0) {
-            traverse(node.children);
-          }
-        }
-      } else {
-        // For AI messages or user messages without edits, add as is
-        result.push({
-          id: node.id,
-          userId: node.userId,
-          parentId: node.parentId,
-          role: node.role,
-          content: node.content,
-          isEdited: node.isEdited,
-          originalContent: node.originalContent,
-          createdAt: node.createdAt
         });
-        
-        // Continue with children
-        if (node.children && node.children.length > 0) {
-          traverse(node.children);
-        }
+      }
+      
+      if (node.children.length > 0) {
+        collectBranches(node.children, `${parentPath}${node.id}-`);
       }
     });
   }
   
-  traverse(tree);
+  collectBranches(tree);
+  return branches;
+}
+
+/**
+ * Flattens a branch to get all messages in sequence
+ */
+function flattenBranch(branch: ChatTreeNode): ChatTreeNode[] {
+  const result: ChatTreeNode[] = [branch];
+  
+  function traverse(nodes: ChatTreeNode[]): void {
+    nodes.forEach(node => {
+      result.push(node);
+      if (node.children.length > 0) {
+        traverse(node.children);
+      }
+    });
+  }
+  
+  traverse(branch.children);
   return result;
 }
 
 /**
- * Creates a fork from a specific message in the conversation
- * @param tree - Tree-structured chat history
- * @param messageId - ID of the message to fork from
- * @returns Array of messages up to the fork point
+ * Gets a specific branch by ID
  */
-export function createForkFromMessage(tree: ChatTreeNode[], messageId: string): Chat[] {
-  const result: Chat[] = [];
+export function getBranchById(tree: ChatTreeNode[], branchId: string): ChatTreeNode[] | null {
+  const parts = branchId.split('-v');
+  if (parts.length < 2) return null;
   
-  function findAndCollect(node: ChatTreeNode, targetId: string, collecting: boolean = false): boolean {
-    if (node.id === targetId) {
-      collecting = true;
-    }
-    
-    if (collecting) {
-      result.push({
-        id: node.id,
-        userId: node.userId,
-        parentId: node.parentId,
-        role: node.role,
-        content: node.content,
-        isEdited: node.isEdited,
-        originalContent: node.originalContent,
-        createdAt: node.createdAt
-      });
-    }
-    
-    // Search children
-    if (node.children && node.children.length > 0) {
-      for (const child of node.children) {
-        if (findAndCollect(child, targetId, collecting)) {
-          return true;
+  const messageId = parts[0];
+  const version = parseInt(parts[1]);
+  
+  function findBranch(nodes: ChatTreeNode[]): ChatTreeNode[] | null {
+    for (const node of nodes) {
+      if (node.id === messageId) {
+        // Find the specific version
+        const targetBranch = node.branches.find(b => b.version === version);
+        if (targetBranch) {
+          return flattenBranch(targetBranch);
         }
       }
+      
+      if (node.children.length > 0) {
+        const result = findBranch(node.children);
+        if (result) return result;
+      }
     }
-    
-    return collecting;
+    return null;
   }
   
-  // Search through all root conversations
-  for (const root of tree) {
-    if (findAndCollect(root, messageId)) {
-      break;
-    }
-  }
-  
-  // Sort chronologically
-  return result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  return findBranch(tree);
 }
 
 /**
- * Gets messages up to a specific point in a conversation branch
- * Useful for editing operations where we need context up to a certain message
- * @param tree - Tree-structured chat history
- * @param messageId - ID of the message to get context up to
- * @param includeTarget - Whether to include the target message in the result
- * @returns Array of messages up to the specified point
+ * Gets the next and previous branches for navigation
  */
-export function getMessagesUpToPoint(tree: ChatTreeNode[], messageId: string, includeTarget: boolean = true): Chat[] {
-  const result: Chat[] = [];
+export function getAdjacentBranches(tree: ChatTreeNode[], currentBranchId: string): {
+  previous: string | null;
+  next: string | null;
+} {
+  const allBranches = getAllBranches(tree);
+  const currentIndex = allBranches.findIndex(b => b.id === currentBranchId);
   
-  function findAndCollect(node: ChatTreeNode, targetId: string, collecting: boolean = false): boolean {
-    if (node.id === targetId) {
-      if (includeTarget) {
-        collecting = true;
+  if (currentIndex === -1) {
+    return { previous: null, next: null };
+  }
+  
+  return {
+    previous: currentIndex > 0 ? allBranches[currentIndex - 1].id : null,
+    next: currentIndex < allBranches.length - 1 ? allBranches[currentIndex + 1].id : null
+  };
+}
+
+/**
+ * Creates a new branch when editing a message
+ */
+export function createNewBranch(
+  tree: ChatTreeNode[], 
+  messageId: string, 
+  newContent: string
+): { newBranchId: string; updatedTree: ChatTreeNode[] } {
+  // Deep clone the tree
+  const updatedTree = JSON.parse(JSON.stringify(tree)) as ChatTreeNode[];
+  
+  function findAndUpdate(nodes: ChatTreeNode[]): boolean {
+    for (const node of nodes) {
+      if (node.id === messageId) {
+        // Create a new version
+        const newVersion: ChatTreeNode = {
+          ...node,
+          id: crypto.randomUUID(),
+          content: newContent,
+          isEdited: true,
+          originalContent: node.content,
+          createdAt: new Date(),
+          children: [],
+          branches: [],
+          version: node.version + 1,
+          isLatest: true
+        };
+        
+        // Mark old version as not latest
+        node.isLatest = false;
+        
+        // Add new version to children
+        node.children.push(newVersion);
+        
+        // Create a branch for the old version
+        const oldBranch = {
+          ...node,
+          children: [],
+          branches: [],
+          version: node.version,
+          isLatest: false
+        };
+        
+        node.branches.push(oldBranch);
+        
+        return true;
       }
-      return true; // Found the target
-    }
-    
-    if (collecting) {
-      result.push({
-        id: node.id,
-        userId: node.userId,
-        parentId: node.parentId,
-        role: node.role,
-        content: node.content,
-        isEdited: node.isEdited,
-        originalContent: node.originalContent,
-        createdAt: node.createdAt
-      });
-    }
-    
-    // Search children
-    if (node.children && node.children.length > 0) {
-      for (const child of node.children) {
-        if (findAndCollect(child, targetId, collecting)) {
-          return true;
-        }
+      
+      if (node.children.length > 0) {
+        if (findAndUpdate(node.children)) return true;
       }
     }
-    
     return false;
   }
   
-  // Search through all root conversations
-  for (const root of tree) {
-    if (findAndCollect(root, messageId)) {
-      break;
-    }
-  }
+  findAndUpdate(updatedTree);
   
-  // Sort chronologically
-  return result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  // Return the new branch ID
+  const newBranchId = `${messageId}-v${getMessageVersion(updatedTree, messageId) + 1}`;
+  
+  return { newBranchId, updatedTree };
 }
 
 /**
- * Removes messages from a specific point downward in a conversation
- * Useful for editing operations where old responses need to be removed
- * @param messages - Array of messages to filter
- * @param fromMessageId - ID of the message to start removing from (exclusive)
- * @returns Filtered array with messages removed from the specified point
+ * Gets the current version of a message
  */
-export function removeMessagesFromPoint(messages: Chat[], fromMessageId: string): Chat[] {
-  const messageMap = new Map<string, Chat>();
-  const descendants = new Set<string>();
+function getMessageVersion(tree: ChatTreeNode[], messageId: string): number {
+  let version = 1;
   
-  // Build lookup map
-  messages.forEach(msg => messageMap.set(msg.id, msg));
-  
-  // Find all descendant message IDs
-  function collectDescendants(parentId: string): void {
-    messages.forEach(msg => {
-      if (msg.parentId === parentId) {
-        descendants.add(msg.id);
-        collectDescendants(msg.id);
+  function findVersion(nodes: ChatTreeNode[]): void {
+    for (const node of nodes) {
+      if (node.id === messageId) {
+        version = node.version;
+        return;
       }
-    });
+      
+      if (node.children.length > 0) {
+        findVersion(node.children);
+      }
+    }
   }
   
-  collectDescendants(fromMessageId);
-  
-  // Filter out descendants and the target message
-  return messages.filter(msg => msg.id !== fromMessageId && !descendants.has(msg.id));
+  findVersion(tree);
+  return version;
 }
