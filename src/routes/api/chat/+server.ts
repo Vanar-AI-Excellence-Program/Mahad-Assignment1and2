@@ -68,24 +68,48 @@ Remember to always format your responses properly and cite your sources when usi
 // System prompt for when no document context is available
 const NO_CONTEXT_SYSTEM_PROMPT = `You are a helpful AI assistant powered by Google Gemini. 
 
-## ⚠️ Important Notice
-The user has not uploaded any documents yet, or your question is not related to uploaded content. I can only provide general assistance based on my training data.
+## 🎯 Core Capabilities
+I can help you with a wide variety of topics including:
+- **Programming & Development**: Code review, debugging, best practices, architecture design
+- **Writing & Communication**: Content creation, editing, grammar, style improvement
+- **Analysis & Problem Solving**: Data analysis, logical reasoning, strategic thinking
+- **General Knowledge**: Science, technology, history, current events, and more
+- **Creative Tasks**: Brainstorming, idea generation, creative writing
 
 ## 📝 Response Formatting
-- Use proper markdown formatting
-- Be helpful and informative
-- If the user asks about specific documents or files, politely explain that you need documents to be uploaded first
-- Suggest they can upload PDF or TXT files to get more specific assistance
+- Use proper markdown formatting for better readability
+- Use headers (# ## ###) for sections
+- Use **bold** and *italic* for emphasis
+- Use \`code\` for inline code and \`\`\`code blocks\`\`\` for longer code
+- Use bullet points (- or *) for lists
+- Use numbered lists (1. 2. 3.) for sequential items
 
-## 🎯 Guidelines
+## 💻 Code Examples
+When providing code examples:
+- Use proper syntax highlighting
+- Include comments explaining the logic
+- Provide complete, runnable examples when possible
+- Suggest best practices and alternatives
+
+## 🎨 Style Guidelines
+- Be concise but thorough
+- Use examples when helpful
+- Maintain a professional and helpful tone
 - Be honest about limitations
-- Don't make up information about specific documents
-- Offer to help with general questions or explain how the document upload feature works`;
+- Offer to help with follow-up questions
 
-// Helper function to retrieve context directly from database
-async function retrieveContextDirect(query: string, k: number = 5) {
+## 📚 Document Upload Feature
+If the user asks about specific documents or files:
+- Politely explain that you need documents to be uploaded first
+- Suggest they can upload PDF or TXT files to get more specific assistance
+- Offer to help with general questions about the topic instead
+
+Remember: I'm here to help with any question you have, whether it's about programming, writing, analysis, or just having a friendly conversation!`;
+
+// Helper function to retrieve context directly from database (conversation-scoped)
+async function retrieveContextDirect(query: string, conversationId: string, k: number = 5) {
   try {
-    console.log(`🔍 [RAG] Retrieving context directly from database for query: "${query}"`);
+    console.log(`🔍 [RAG] Retrieving context for conversation: ${conversationId}, query: "${query}"`);
     
     // Get embedding for the query using the embedding service
     const embeddingResponse = await fetch(`${config.EMBEDDING_API_URL}`, {
@@ -103,7 +127,7 @@ async function retrieveContextDirect(query: string, k: number = 5) {
 
     const { embedding } = await embeddingResponse.json();
     
-    // Use pgvector cosine similarity to find most relevant chunks
+    // Use pgvector cosine similarity to find most relevant chunks FROM THIS CONVERSATION ONLY
     const embeddingString = `[${embedding.join(',')}]`;
     
     const relevantChunks = await db
@@ -118,27 +142,45 @@ async function retrieveContextDirect(query: string, k: number = 5) {
       })
       .from(chunks)
       .innerJoin(documents, eq(chunks.document_id, documents.id))
+      .where(eq(chunks.conversation_id, conversationId)) // Only chunks from this conversation
       .orderBy(sql`similarity_score DESC`)
       .limit(k);
 
-    console.log(`📄 Found ${relevantChunks.length} relevant chunks using vector similarity`);
+    console.log(`📄 Found ${relevantChunks.length} relevant chunks for conversation: ${conversationId}`);
 
     if (relevantChunks.length === 0) {
-      console.log('[RAG] No vector results found');
+      console.log(`[RAG] No vector results found for conversation: ${conversationId}`);
       return null;
     }
 
+    // Remove duplicate chunks based on content similarity
+    const uniqueChunks = [];
+    const seenContents = new Set();
+    
+    for (const chunk of relevantChunks) {
+      // Create a normalized content key (remove extra whitespace, lowercase)
+      const normalizedContent = chunk.content.trim().toLowerCase().replace(/\s+/g, ' ');
+      
+      if (!seenContents.has(normalizedContent)) {
+        seenContents.add(normalizedContent);
+        uniqueChunks.push(chunk);
+      }
+    }
+
+    console.log(`📄 After deduplication: ${uniqueChunks.length} unique chunks for conversation: ${conversationId}`);
+
     const context = {
-      chunks: relevantChunks,
-      total_chunks: relevantChunks.length,
-      query
+      chunks: uniqueChunks,
+      total_chunks: uniqueChunks.length,
+      query,
+      conversation_id: conversationId
     };
 
-    console.log(`✅ [RAG] Retrieved ${context.chunks.length} relevant chunks for query: "${query.substring(0, 50)}..."`);
+    console.log(`✅ [RAG] Retrieved ${context.chunks.length} relevant chunks for conversation: ${conversationId}, query: "${query.substring(0, 50)}..."`);
     return context;
 
   } catch (error) {
-    console.error('[RAG] Error retrieving context directly:', error);
+    console.error(`[RAG] Error retrieving context for conversation ${conversationId}:`, error);
     return null;
   }
 }
@@ -251,28 +293,30 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		
 		if (userMessage.role === 'user') {
 			try {
-				// Check if there are any documents in the database first
+				// Check if there are any documents in the database FOR THIS CONVERSATION
+				const conversationId = parentId || `conv_${Date.now()}`;
 				const documentCount = await db.query.documents.findMany({
+					where: eq(documents.conversation_id, conversationId),
 					columns: { id: true }
 				});
 				
 				hasDocuments = documentCount.length > 0;
 				
 				if (hasDocuments) {
-					console.log('🔧 [API] Documents found in database, attempting RAG retrieval');
-					retrievedContext = await retrieveContextDirect(userMessage.content);
+					console.log(`🔧 [API] Documents found in conversation ${conversationId}, attempting RAG retrieval`);
+					retrievedContext = await retrieveContextDirect(userMessage.content, conversationId);
 					
 					if (retrievedContext && retrievedContext.chunks.length > 0) {
 						enhancedSystemPrompt = buildEnhancedPrompt(BASE_SYSTEM_PROMPT, retrievedContext);
-						console.log('🔧 [API] Retrieved RAG context for query:', userMessage.content.substring(0, 100));
-						console.log('🔧 [API] Enhanced prompt length:', enhancedSystemPrompt.length);
-						console.log('🔧 [API] Context chunks:', retrievedContext.chunks.length);
+						console.log(`🔧 [API] Retrieved RAG context for conversation ${conversationId}, query:`, userMessage.content.substring(0, 100));
+						console.log(`🔧 [API] Enhanced prompt length:`, enhancedSystemPrompt.length);
+						console.log(`🔧 [API] Context chunks:`, retrievedContext.chunks.length);
 					} else {
-						console.log('🔧 [API] No relevant RAG context found, using base prompt');
+						console.log(`🔧 [API] No relevant RAG context found for conversation ${conversationId}, using base prompt`);
 						enhancedSystemPrompt = BASE_SYSTEM_PROMPT;
 					}
 				} else {
-					console.log('🔧 [API] No documents in database, using no-context prompt');
+					console.log(`🔧 [API] No documents in conversation ${conversationId}, using no-context prompt`);
 					enhancedSystemPrompt = NO_CONTEXT_SYSTEM_PROMPT;
 				}
 			} catch (error) {

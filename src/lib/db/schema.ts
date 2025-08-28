@@ -123,12 +123,14 @@ export const documents = pgTable('documents', {
   name: text('name').notNull(),
   mime: text('mime').notNull(),
   size_bytes: integer('size_bytes').notNull(),
+  conversation_id: uuid('conversation_id').references(() => chats.id, { onDelete: 'cascade' }),
   created_at: timestamp('created_at').defaultNow().notNull(),
 });
 
 export const chunks = pgTable('chunks', {
   id: uuid('id').primaryKey().defaultRandom(),
   document_id: uuid('document_id').notNull().references(() => documents.id, { onDelete: 'cascade' }),
+  conversation_id: uuid('conversation_id').references(() => chats.id, { onDelete: 'cascade' }),
   content: text('content').notNull(),
   embedding: text('embedding').notNull(), // Store as text, will be converted to vector(3072) in database
   chunk_index: integer('chunk_index').notNull(),

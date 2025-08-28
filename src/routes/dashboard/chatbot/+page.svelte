@@ -91,6 +91,10 @@
 		showHistory = false;
 		cancelEditing();
 		
+		// Clear RAG context for new chat
+		currentContext = null;
+		showContext = false;
+		
 		// Clear version data for new chat
 		messageVersions.clear();
 		currentVersions.clear();
@@ -255,6 +259,10 @@
 			try {
 				const formData = new FormData();
 				formData.append('file', file);
+				
+				// Add conversation ID for conversation-scoped RAG
+				const currentConversationId = selectedConversationId || `conv_${Date.now()}`;
+				formData.append('conversationId', currentConversationId);
 				
 				const response = await fetch('/api/upload', {
 					method: 'POST',
@@ -1094,6 +1102,22 @@
 							<h2 class="text-lg lg:text-2xl font-semibold text-gray-700 mb-2">Welcome to AI Assistant</h2>
 							<p class="text-base lg:text-lg text-gray-500 mb-3 lg:mb-4">I'm here to help you with any questions or tasks</p>
 							
+							<!-- General AI Capabilities -->
+							<div class="max-w-md mb-4 p-4 bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-200 rounded-lg">
+								<h3 class="text-sm font-semibold text-purple-800 mb-2 flex items-center">
+									<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+									</svg>
+									AI Capabilities
+								</h3>
+								<div class="text-xs text-purple-700 space-y-1">
+									<p>💻 Programming & Development help</p>
+									<p>✍️ Writing & Communication assistance</p>
+									<p>🧠 Analysis & Problem solving</p>
+									<p>🌍 General knowledge & creative tasks</p>
+								</div>
+							</div>
+							
 							<!-- RAG System Information -->
 							<div class="max-w-md mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
 								<h3 class="text-sm font-semibold text-blue-800 mb-2 flex items-center">
@@ -1111,7 +1135,7 @@
 							
 							<div class="max-w-md">
 								<p class="text-xs lg:text-sm text-gray-400 leading-relaxed">
-									You can ask me about programming, writing, analysis, or just have a friendly conversation. 
+									<strong>Start chatting now!</strong> You can ask me anything - I'm here to help with programming, writing, analysis, or just have a friendly conversation. 
 									I'm powered by Google's latest Gemini 2.0 Flash model for the best possible responses.
 								</p>
 							</div>
@@ -1409,17 +1433,31 @@
 				<div class="mb-3 p-2 bg-gray-50 border border-gray-200 rounded-lg">
 					<div class="flex items-center justify-between text-xs text-gray-600">
 						<div class="flex items-center space-x-2">
-							<svg class="w-3 h-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-							</svg>
-							<span>Document Q&A System Active</span>
+							{#if currentContext && currentContext.chunks && currentContext.chunks.length > 0}
+								<svg class="w-3 h-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+								</svg>
+								<span>Document Q&A Active - {currentContext.chunks.length} sources from this conversation</span>
+							{:else if selectedConversationId}
+								<svg class="w-3 h-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+								</svg>
+								<span>General AI Assistant - Upload documents for Q&A in this conversation</span>
+							{:else}
+								<svg class="w-3 h-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+								</svg>
+								<span>General AI Assistant - Start a conversation to upload documents</span>
+							{/if}
 						</div>
-						<button
-							on:click={() => showContext = !showContext}
-							class="text-blue-600 hover:text-blue-800 font-medium"
-						>
-							{showContext ? 'Hide Sources' : 'Show Sources'}
-						</button>
+						{#if currentContext && currentContext.chunks && currentContext.chunks.length > 0}
+							<button
+								on:click={() => showContext = !showContext}
+								class="text-blue-600 hover:text-blue-800 font-medium"
+							>
+								{showContext ? 'Hide Sources' : 'Show Sources'}
+							</button>
+						{/if}
 					</div>
 				</div>
 				

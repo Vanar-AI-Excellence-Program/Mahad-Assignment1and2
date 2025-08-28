@@ -101,13 +101,24 @@ The system is working correctly and your document is stored safely.`;
   }
 }
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, cookies }) => {
   try {
+    // Check authentication
+    const sessionToken = cookies.get('authjs.session-token');
+    if (!sessionToken) {
+      return json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
+    const conversationId = formData.get('conversationId') as string;
     
     if (!file) {
       return json({ error: 'No file provided' }, { status: 400 });
+    }
+
+    if (!conversationId) {
+      return json({ error: 'No conversation ID provided' }, { status: 400 });
     }
 
     // Validate file type
@@ -139,14 +150,15 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ error: 'File contains no text content' }, { status: 400 });
     }
 
-    // Insert document record
+    // Insert document record with conversation_id
     const [documentRecord] = await db.insert(documents).values({
       name: file.name,
       mime: file.type,
       size_bytes: file.size,
+      conversation_id: conversationId,
     }).returning();
 
-    console.log(`Document inserted: ${documentRecord.id}`);
+    console.log(`Document inserted: ${documentRecord.id} for conversation: ${conversationId}`);
 
     // Chunk the text
     const textChunks = chunkText(textContent);
@@ -160,6 +172,7 @@ export const POST: RequestHandler = async ({ request }) => {
         
         return {
           document_id: documentRecord.id,
+          conversation_id: conversationId,
           content: chunk,
           embedding: JSON.stringify(embedding), // Convert array to JSON string for storage
           chunk_index: index,
@@ -171,11 +184,11 @@ export const POST: RequestHandler = async ({ request }) => {
     });
 
     const chunkData = await Promise.all(chunkPromises);
-    console.log(`All ${chunkData.length} chunks embedded successfully`);
+    console.log(`All ${chunkData.length} chunks embedded successfully for conversation: ${conversationId}`);
 
     // Insert chunks with embeddings
     await db.insert(chunks).values(chunkData);
-    console.log(`All chunks inserted into database`);
+    console.log(`All chunks inserted into database for conversation: ${conversationId}`);
 
     return json({
       success: true,
@@ -184,6 +197,7 @@ export const POST: RequestHandler = async ({ request }) => {
         name: documentRecord.name,
         chunks: chunkData.length,
         size_bytes: documentRecord.size_bytes,
+        conversation_id: conversationId,
       },
     });
 
