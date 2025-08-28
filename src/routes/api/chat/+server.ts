@@ -140,13 +140,18 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 				};
 				
 				try {
+					// Build strict ancestor context for this conversation + latest user message
+					const ancestorMessages = await getAncestorMessages(validConversationId!, parentId ?? null, true);
+					const messagesForAI = [
+						...ancestorMessages.map((msg: any) => ({ role: msg.role, content: msg.content })),
+						{ role: 'user', content: userMessage.content }
+					];
+					console.log('POST context size:', messagesForAI.length);
+					
 					// Generate streaming response using Gemini
 					const result = await streamText({
 						model: google('gemini-2.0-flash'),
-						messages: messages.map((msg: ChatMessage) => ({
-							role: msg.role,
-							content: msg.content
-						})),
+						messages: messagesForAI,
 						temperature: 0.7,
 					});
 
@@ -363,11 +368,11 @@ export const PUT: RequestHandler = async ({ request, cookies }) => {
 			return new Response('Message not found or not editable', { status: 404 });
 		}
 
-		// Get all messages in the current branch up to this message
-		console.log('Getting branch messages up to:', messageId);
-		const branchMessages = await getBranchMessagesUpTo(messageId, true);
-		console.log('Branch messages found:', branchMessages.length);
-		
+		// Get strict ancestor context (root -> parent of the edited message) within the same conversation
+		console.log('Getting ancestor context for conversation', messageToEdit.conversationId, 'up to parent:', messageToEdit.parentId);
+		const ancestorMessages = await getAncestorMessages(messageToEdit.conversationId!, messageToEdit.parentId ?? null, true);
+		console.log('Ancestor messages found:', ancestorMessages.length, ancestorMessages.map(m => ({ id: m.id, role: m.role, snippet: (m.content || '').slice(0, 60) })));
+
 		// Create a new version of the message (this preserves the old version)
 		const newMessageId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString() + Math.random().toString(36).substr(2, 9);
 		console.log('Creating new message with ID:', newMessageId);
@@ -394,7 +399,7 @@ export const PUT: RequestHandler = async ({ request, cookies }) => {
 				try {
 					// Prepare messages for AI (include the new edited message)
 					const messagesForAI = [
-						...branchMessages.map(msg => ({
+						...ancestorMessages.map(msg => ({
 							role: msg.role,
 							content: msg.content
 						})),
@@ -444,7 +449,7 @@ export const PUT: RequestHandler = async ({ request, cookies }) => {
 				} catch (error) {
 					console.error('Streaming error during edit:', error);
 					console.error('Streaming error details:', {
-						messageId,
+						messageId: messageId,
 						newContent: newContent?.substring(0, 100),
 						errorMessage: error instanceof Error ? error.message : 'Unknown error',
 						errorStack: error instanceof Error ? error.stack : undefined
@@ -480,29 +485,28 @@ export const PUT: RequestHandler = async ({ request, cookies }) => {
 };
 
 // Helper function to get all messages in a branch up to a specific message
-async function getBranchMessagesUpTo(messageId: string, includeTarget: boolean = true): Promise<any[]> {
+async function getAncestorMessages(conversationId: string, targetId: string | null, includeTarget: boolean = true): Promise<any[]> {
 	const messages: any[] = [];
+	if (!targetId) return messages;
 	const messageMap = new Map<string, any>();
 	
-	// Get all messages
+	// Only load this conversation's messages
 	const allMessages = await db.query.chats.findMany({
+		where: eq(chats.conversationId, conversationId),
 		orderBy: chats.createdAt,
 	});
 
-	// Build lookup map
 	allMessages.forEach(msg => messageMap.set(msg.id, msg));
 
-	// Find the target message and collect all ancestors
-	let currentMessage = messageMap.get(messageId);
+	let currentMessage = messageMap.get(targetId);
 	while (currentMessage && currentMessage.parentId) {
-		if (includeTarget || currentMessage.id !== messageId) {
+		if (includeTarget || currentMessage.id !== targetId) {
 			messages.unshift(currentMessage);
 		}
 		currentMessage = messageMap.get(currentMessage.parentId);
 	}
 	
-	// Add the root message if it exists and we should include it
-	if (currentMessage && (includeTarget || currentMessage.id !== messageId)) {
+	if (currentMessage && (includeTarget || currentMessage.id !== targetId)) {
 		messages.unshift(currentMessage);
 	}
 
