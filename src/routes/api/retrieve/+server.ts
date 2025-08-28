@@ -1,21 +1,27 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { env } from '$env/dynamic/private';
+import { db } from '$lib/db';
+import { documents, chunks } from '$lib/db/schema';
+import { eq, sql } from 'drizzle-orm';
+import { config } from '$lib/config/env';
 
-const EMBEDDING_API_URL = env.EMBEDDING_API_URL || 'http://localhost:8000/embed';
+const EMBEDDING_API_URL = config.EMBEDDING_API_URL;
 
 interface RetrieveRequest {
   query: string;
-  k?: number;
+  top_k?: number;
 }
 
 interface RetrieveResponse {
-  matches: Array<{
+  chunks: Array<{
     id: string;
     content: string;
     document_name: string;
-    similarity: number;
+    chunk_index: number;
+    similarity_score: number;
   }>;
+  total_chunks: number;
+  query: string;
 }
 
 // Helper function to get embeddings from the embedding service
@@ -43,47 +49,80 @@ async function getEmbedding(text: string): Promise<{ embedding: number[], dim: n
 export const POST: RequestHandler = async ({ request }) => {
   try {
     const body: RetrieveRequest = await request.json();
-    const { query, k = 5 } = body;
+    const { query, top_k = 5 } = body;
 
     if (!query || typeof query !== 'string') {
       return json({ error: 'Query string is required' }, { status: 400 });
     }
 
-    if (k < 1 || k > 20) {
-      return json({ error: 'k must be between 1 and 20' }, { status: 400 });
+    if (top_k < 1 || top_k > 20) {
+      return json({ error: 'top_k must be between 1 and 20' }, { status: 400 });
     }
+
+    console.log(`🔍 Processing query: "${query}" (top_k: ${top_k})`);
 
     // Get embedding for the query
     const { embedding } = await getEmbedding(query);
+    console.log(`✅ Query embedded successfully (${embedding.length} dimensions)`);
 
-    // Use raw SQL for vector similarity search with pgvector
-    const sql = `
-      SELECT 
-        c.id,
-        c.content,
-        d.name as document_name,
-        1 - (c.embedding <=> $1::vector) as similarity
-      FROM chunks c
-      JOIN documents d ON c.document_id = d.id
-      ORDER BY c.embedding <=> $1::vector
-      LIMIT $2
-    `;
+    // Use pgvector cosine similarity to find most relevant chunks
+    // Convert the embedding array to a proper vector format for pgvector
+    const embeddingString = `[${embedding.join(',')}]`;
+    
+    const relevantChunks = await db
+      .select({
+        id: chunks.id,
+        content: chunks.content,
+        document_name: documents.name,
+        chunk_index: chunks.chunk_index,
+        similarity_score: sql<number>`
+          (1 - (embedding::vector(3072) <=> ${embeddingString}::vector(3072))) as similarity_score
+        `
+      })
+      .from(chunks)
+      .innerJoin(documents, eq(chunks.document_id, documents.id))
+      .orderBy(sql`similarity_score DESC`)
+      .limit(top_k);
 
-    // Execute the query using the database client
-    const { db } = await import('$lib/db');
-    const result = await db.execute(sql, [embedding, k]);
+    console.log(`📄 Found ${relevantChunks.length} relevant chunks using vector similarity`);
 
-    const matches = result.map((row: any) => ({
-      id: row.id,
-      content: row.content,
-      document_name: row.document_name,
-      similarity: parseFloat(row.similarity),
-    }));
+    if (relevantChunks.length === 0) {
+      // Fallback to text-based similarity if no vector results
+      console.log('⚠️ No vector results, falling back to text similarity');
+      
+      const allChunks = await db
+        .select({
+          id: chunks.id,
+          content: chunks.content,
+          document_name: documents.name,
+          chunk_index: chunks.chunk_index,
+        })
+        .from(chunks)
+        .innerJoin(documents, eq(chunks.document_id, documents.id));
+
+      // Calculate text similarity as fallback
+      const chunksWithScores = allChunks
+        .map(chunk => ({
+          ...chunk,
+          similarity_score: calculateTextSimilarity(query, chunk.content)
+        }))
+        .filter(chunk => chunk.similarity_score > 0.1) // Only include chunks with some relevance
+        .sort((a, b) => b.similarity_score - a.similarity_score)
+        .slice(0, top_k);
+
+      console.log(`📄 Found ${chunksWithScores.length} chunks using text similarity fallback`);
+      
+      return json({
+        chunks: chunksWithScores,
+        total_chunks: chunksWithScores.length,
+        query,
+      } as RetrieveResponse);
+    }
 
     return json({
-      matches,
+      chunks: relevantChunks,
+      total_chunks: relevantChunks.length,
       query,
-      k,
     } as RetrieveResponse);
 
   } catch (error) {
@@ -94,3 +133,20 @@ export const POST: RequestHandler = async ({ request }) => {
     );
   }
 };
+
+// Helper function to calculate text similarity (fallback method)
+function calculateTextSimilarity(query: string, content: string): number {
+  const queryWords = query.toLowerCase().split(/\s+/).filter(word => word.length > 2);
+  const contentLower = content.toLowerCase();
+  
+  if (queryWords.length === 0) return 0;
+  
+  let matchCount = 0;
+  for (const word of queryWords) {
+    if (contentLower.includes(word)) {
+      matchCount++;
+    }
+  }
+  
+  return matchCount / queryWords.length;
+}

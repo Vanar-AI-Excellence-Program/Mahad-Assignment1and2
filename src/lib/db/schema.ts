@@ -130,7 +130,7 @@ export const chunks = pgTable('chunks', {
   id: uuid('id').primaryKey().defaultRandom(),
   document_id: uuid('document_id').notNull().references(() => documents.id, { onDelete: 'cascade' }),
   content: text('content').notNull(),
-  embedding: text('embedding').notNull(), // Will store vector as text, converted in application layer
+  embedding: text('embedding').notNull(), // Store as text, will be converted to vector(3072) in database
   chunk_index: integer('chunk_index').notNull(),
   created_at: timestamp('created_at').defaultNow().notNull(),
 });
@@ -167,4 +167,4 @@ export type NewChunk = typeof chunks.$inferInsert;
 
 // SQL functions for pgvector
 export const createVectorExtension = sql`CREATE EXTENSION IF NOT EXISTS vector`;
-export const createVectorIndex = sql`CREATE INDEX IF NOT EXISTS chunks_embedding_idx ON chunks USING ivfflat (embedding::vector(768)) WITH (lists = 100)`;
+export const createVectorIndex = sql`CREATE INDEX IF NOT EXISTS chunks_embedding_idx ON chunks USING ivfflat (embedding::vector(3072)) WITH (lists = 100)`;

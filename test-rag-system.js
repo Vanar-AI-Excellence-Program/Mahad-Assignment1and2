@@ -1,85 +1,69 @@
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import { config } from 'dotenv';
 
 // Load environment variables
 config();
 
+const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5433/mydatabase';
+
 async function testRAGSystem() {
   try {
-    console.log('🧪 Testing complete RAG system...\n');
+    console.log('🧪 Testing RAG System...\n');
     
-    // Test 1: Embedding service health
-    console.log('1️⃣ Testing embedding service...');
-    const embeddingHealth = await fetch('http://localhost:8000/health');
-    if (embeddingHealth.ok) {
-      const healthData = await embeddingHealth.json();
-      console.log('✅ Embedding service:', healthData);
-    } else {
-      console.log('❌ Embedding service health check failed');
+    const client = postgres(connectionString);
+    
+    // Check documents and chunks
+    console.log('📊 Database Status:');
+    const docCount = await client`SELECT COUNT(*) as count FROM documents`;
+    const chunkCount = await client`SELECT COUNT(*) as count FROM chunks`;
+    
+    console.log(`- Documents: ${docCount[0].count}`);
+    console.log(`- Chunks: ${chunkCount[0].count}`);
+    
+    if (chunkCount[0].count === 0) {
+      console.log('\n⚠️  No chunks found! Documents need to be processed.');
+      console.log('💡 Upload a text file to test the RAG system.');
       return;
     }
     
-    // Test 2: Test embedding endpoint
-    console.log('\n2️⃣ Testing embedding endpoint...');
-    const embeddingResponse = await fetch('http://localhost:8000/embed', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: 'Hello world' })
-    });
+    // Test the retrieve endpoint
+    console.log('\n🔍 Testing Retrieve Endpoint...');
     
-    if (embeddingResponse.ok) {
-      const embeddingData = await embeddingResponse.json();
-      console.log('✅ Embedding generated:', {
-        dim: embeddingData.dim,
-        vectorLength: embeddingData.embedding.length
-      });
-    } else {
-      console.log('❌ Embedding generation failed');
-      return;
-    }
+    const testQueries = [
+      'What is Mahad?',
+      'Tell me about AI',
+      'What documents are available?'
+    ];
     
-    // Test 3: Test SvelteKit API endpoints
-    console.log('\n3️⃣ Testing SvelteKit API endpoints...');
-    
-    // Test upload endpoint (with a simple text file)
-    const testFile = new File(['This is a test document for RAG testing.'], 'test.txt', { type: 'text/plain' });
-    const formData = new FormData();
-    formData.append('file', testFile);
-    
-    const uploadResponse = await fetch('http://localhost:5175/api/upload', {
-      method: 'POST',
-      body: formData
-    });
-    
-    if (uploadResponse.ok) {
-      const uploadData = await uploadResponse.json();
-      console.log('✅ File upload successful:', uploadData);
+    for (const query of testQueries) {
+      console.log(`\nQuery: "${query}"`);
       
-      // Test retrieve endpoint
-      console.log('\n4️⃣ Testing retrieve endpoint...');
-      const retrieveResponse = await fetch('http://localhost:5175/api/retrieve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: 'test document', k: 3 })
-      });
-      
-      if (retrieveResponse.ok) {
-        const retrieveData = await retrieveResponse.json();
-        console.log('✅ Document retrieval successful:', {
-          matchesCount: retrieveData.matches.length,
-          firstMatch: retrieveData.matches[0]?.content?.substring(0, 50) + '...'
+      try {
+        const response = await fetch('http://localhost:5173/api/retrieve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, top_k: 3 })
         });
-      } else {
-        console.log('❌ Document retrieval failed');
-        const errorText = await retrieveResponse.text();
-        console.log('Error details:', errorText);
+        
+        if (response.ok) {
+          const result = await response.json();
+          console.log(`✅ Found ${result.chunks.length} relevant chunks`);
+          
+          if (result.chunks.length > 0) {
+            console.log('Top result:', result.chunks[0].document_name);
+            console.log('Content preview:', result.chunks[0].content.substring(0, 100) + '...');
+          }
+        } else {
+          console.log(`❌ Error: ${response.status} ${response.statusText}`);
+        }
+      } catch (error) {
+        console.log(`❌ Network error: ${error.message}`);
       }
-    } else {
-      console.log('❌ File upload failed');
-      const errorText = await uploadResponse.text();
-      console.log('Error details:', errorText);
     }
     
-    console.log('\n🎉 RAG system test completed!');
+    await client.end();
+    console.log('\n✅ RAG system test completed!');
     
   } catch (error) {
     console.error('❌ Error testing RAG system:', error);

@@ -2,10 +2,10 @@ import { google } from '@ai-sdk/google';
 import { streamText } from 'ai';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { sessions, chats } from '$lib/db/schema';
+import { sessions, chats, documents, chunks } from '$lib/db/schema';
 import { forkingSystem } from '$lib/forking-system';
 import { forkingAdapter } from '$lib/db/forking-adapter';
-import { eq, and, gt, inArray } from 'drizzle-orm';
+import { eq, and, gt, inArray, sql } from 'drizzle-orm';
 import { config } from '$lib/config/env';
 
 interface ChatMessage {
@@ -14,38 +14,183 @@ interface ChatMessage {
 	content: string;
 }
 
-// Enhanced system prompt for better formatting
+// Enhanced system prompt for better formatting and RAG integration
 const BASE_SYSTEM_PROMPT = `You are a helpful AI assistant powered by Google Gemini. Please follow these guidelines for your responses:
 
-1. **Formatting**: Always use proper markdown formatting for better readability:
-   - Use headers (# ## ###) for sections
-   - Use **bold** and *italic* for emphasis
-   - Use \`code\` for inline code and \`\`\`code blocks\`\`\` for longer code
-   - Use bullet points (- or *) for lists
-   - Use numbered lists (1. 2. 3.) for sequential items
+## 🎯 Core Instructions
 
-2. **Tables**: When presenting data in tables, use proper markdown table format:
-   \`\`\`
-   | Column 1 | Column 2 | Column 3 |
-   |----------|----------|----------|
-   | Data 1   | Data 2   | Data 3   |
-   | Data 4   | Data 5   | Data 6   |
-   \`\`\`
+1. **Always use the provided document context** when available to answer questions accurately
+2. **Cite specific documents** when referencing information: "According to [Document Name]..."
+3. **Be honest about limitations** - if you don't have enough information, say so clearly
+4. **Don't make up information** that isn't supported by the documents or your training
 
-3. **Code**: Always use proper syntax highlighting when possible:
-   - JavaScript: \`\`\`javascript
-   - Python: \`\`\`python
-   - HTML: \`\`\`html
-   - CSS: \`\`\`css
-   - SQL: \`\`\`sql
+## 📝 Response Formatting
 
-4. **Structure**: Organize your responses with clear sections and subsections using headers.
+Always use proper markdown formatting for better readability:
+- Use headers (# ## ###) for sections
+- Use **bold** and *italic* for emphasis
+- Use \`code\` for inline code and \`\`\`code blocks\`\`\` for longer code
+- Use bullet points (- or *) for lists
+- Use numbered lists (1. 2. 3.) for sequential items
 
-5. **Clarity**: Be concise but thorough. Use examples when helpful.
+## 📊 Tables
 
-6. **Professional**: Maintain a professional and helpful tone.
+When presenting data in tables, use proper markdown table format:
+\`\`\`
+| Column 1 | Column 2 | Column 3 |
+|----------|----------|----------|
+| Data 1   | Data 2   | Data 3   |
+| Data 4   | Data 5   | Data 6   |
+\`\`\`
 
-Remember to always format your responses properly for the best user experience.`;
+## 💻 Code
+
+Always use proper syntax highlighting when possible:
+- JavaScript: \`\`\`javascript
+- Python: \`\`\`python
+- HTML: \`\`\`html
+- CSS: \`\`\`css
+- SQL: \`\`\`sql
+
+## 🏗️ Structure
+
+Organize your responses with clear sections and subsections using headers.
+
+## 🎨 Style
+
+- Be concise but thorough
+- Use examples when helpful
+- Maintain a professional and helpful tone
+- When using document context, structure your response to clearly show what information comes from which source
+
+Remember to always format your responses properly and cite your sources when using document context.`;
+
+// System prompt for when no document context is available
+const NO_CONTEXT_SYSTEM_PROMPT = `You are a helpful AI assistant powered by Google Gemini. 
+
+## ⚠️ Important Notice
+The user has not uploaded any documents yet, or your question is not related to uploaded content. I can only provide general assistance based on my training data.
+
+## 📝 Response Formatting
+- Use proper markdown formatting
+- Be helpful and informative
+- If the user asks about specific documents or files, politely explain that you need documents to be uploaded first
+- Suggest they can upload PDF or TXT files to get more specific assistance
+
+## 🎯 Guidelines
+- Be honest about limitations
+- Don't make up information about specific documents
+- Offer to help with general questions or explain how the document upload feature works`;
+
+// Helper function to retrieve context directly from database
+async function retrieveContextDirect(query: string, k: number = 5) {
+  try {
+    console.log(`🔍 [RAG] Retrieving context directly from database for query: "${query}"`);
+    
+    // Get embedding for the query using the embedding service
+    const embeddingResponse = await fetch(`${config.EMBEDDING_API_URL}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text: query }),
+    });
+
+    if (!embeddingResponse.ok) {
+      console.warn(`[RAG] Embedding service error: ${embeddingResponse.status}`);
+      return null;
+    }
+
+    const { embedding } = await embeddingResponse.json();
+    
+    // Use pgvector cosine similarity to find most relevant chunks
+    const embeddingString = `[${embedding.join(',')}]`;
+    
+    const relevantChunks = await db
+      .select({
+        id: chunks.id,
+        content: chunks.content,
+        document_name: documents.name,
+        chunk_index: chunks.chunk_index,
+        similarity_score: sql<number>`
+          (1 - (embedding::vector(3072) <=> ${embeddingString}::vector(3072))) as similarity_score
+        `
+      })
+      .from(chunks)
+      .innerJoin(documents, eq(chunks.document_id, documents.id))
+      .orderBy(sql`similarity_score DESC`)
+      .limit(k);
+
+    console.log(`📄 Found ${relevantChunks.length} relevant chunks using vector similarity`);
+
+    if (relevantChunks.length === 0) {
+      console.log('[RAG] No vector results found');
+      return null;
+    }
+
+    const context = {
+      chunks: relevantChunks,
+      total_chunks: relevantChunks.length,
+      query
+    };
+
+    console.log(`✅ [RAG] Retrieved ${context.chunks.length} relevant chunks for query: "${query.substring(0, 50)}..."`);
+    return context;
+
+  } catch (error) {
+    console.error('[RAG] Error retrieving context directly:', error);
+    return null;
+  }
+}
+
+// Helper function to build enhanced prompt
+function buildEnhancedPrompt(basePrompt: string, context: any): string {
+  if (!context || context.chunks.length === 0) {
+    return basePrompt;
+  }
+
+  // Filter chunks with good similarity scores (above 0.2)
+  const relevantChunks = context.chunks.filter((chunk: any) => chunk.similarity_score > 0.2);
+  
+  if (relevantChunks.length === 0) {
+    console.log('[RAG] No chunks with sufficient relevance score, using base prompt');
+    return basePrompt;
+  }
+
+  const contextSection = `
+## 📚 Relevant Document Context
+
+The user has uploaded documents that contain relevant information. Here are the most relevant excerpts:
+
+${relevantChunks.map((chunk: any, index: number) => `
+**Document ${index + 1}**: ${chunk.document_name}
+**Content**: ${chunk.content}
+**Relevance Score**: ${chunk.similarity_score.toFixed(4)}
+`).join('\n')}
+
+## 🎯 Instructions
+
+IMPORTANT: Use the above document context to provide accurate, specific answers to the user's question. 
+
+1. **Always reference the source documents** when providing information
+2. **Cite the document name** when using information from it
+3. **Be specific** about what information comes from which document
+4. **If the context doesn't contain enough information** to fully answer the question, say so clearly and provide what information you can from the available context
+5. **Don't make up information** that isn't supported by the documents
+6. **Use the exact document names** when citing sources
+
+## 📝 Response Format
+
+When answering:
+- Start with a direct answer based on the documents
+- Cite specific documents: "According to [Document Name]..."
+- If you need to clarify or expand, reference the relevant document sections
+- End with a summary of which documents were most helpful
+
+${basePrompt}`;
+
+  return contextSection;
+}
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
 	try {
@@ -71,7 +216,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 			return new Response('Unauthorized', { status: 401 });
 		}
 
-				const { messages, parentId, isEditing = false, editMessageId }: {
+		const { messages, parentId, isEditing = false, editMessageId }: {
 			messages: ChatMessage[];
 			parentId?: string;
 			isEditing?: boolean;
@@ -101,17 +246,40 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 
 		// Retrieve relevant context using RAG if this is a user message
 		let enhancedSystemPrompt = BASE_SYSTEM_PROMPT;
+		let retrievedContext = null;
+		let hasDocuments = false;
+		
 		if (userMessage.role === 'user') {
 			try {
-				const { retrieveContext, buildEnhancedPrompt } = await import('$lib/utils/rag');
-				const context = await retrieveContext(userMessage.content);
-				enhancedSystemPrompt = buildEnhancedPrompt(BASE_SYSTEM_PROMPT, context);
+				// Check if there are any documents in the database first
+				const documentCount = await db.query.documents.findMany({
+					columns: { id: true }
+				});
 				
-				if (context) {
-					console.log('🔧 [API] Retrieved RAG context for query:', userMessage.content.substring(0, 100));
+				hasDocuments = documentCount.length > 0;
+				
+				if (hasDocuments) {
+					console.log('🔧 [API] Documents found in database, attempting RAG retrieval');
+					retrievedContext = await retrieveContextDirect(userMessage.content);
+					
+					if (retrievedContext && retrievedContext.chunks.length > 0) {
+						enhancedSystemPrompt = buildEnhancedPrompt(BASE_SYSTEM_PROMPT, retrievedContext);
+						console.log('🔧 [API] Retrieved RAG context for query:', userMessage.content.substring(0, 100));
+						console.log('🔧 [API] Enhanced prompt length:', enhancedSystemPrompt.length);
+						console.log('🔧 [API] Context chunks:', retrievedContext.chunks.length);
+					} else {
+						console.log('🔧 [API] No relevant RAG context found, using base prompt');
+						enhancedSystemPrompt = BASE_SYSTEM_PROMPT;
+					}
+				} else {
+					console.log('🔧 [API] No documents in database, using no-context prompt');
+					enhancedSystemPrompt = NO_CONTEXT_SYSTEM_PROMPT;
 				}
 			} catch (error) {
-				console.warn('🔧 [API] RAG context retrieval failed, using base prompt:', error);
+				console.warn('🔧 [API] RAG context retrieval failed, using fallback prompt:', error);
+				console.warn('🔧 [API] Error details:', error instanceof Error ? error.message : String(error));
+				// Use appropriate fallback based on whether documents exist
+				enhancedSystemPrompt = hasDocuments ? BASE_SYSTEM_PROMPT : NO_CONTEXT_SYSTEM_PROMPT;
 			}
 		}
 		let conversationId: string | undefined;
@@ -255,6 +423,13 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 						}
 					}
 
+					// Send context information if available
+					if (retrievedContext) {
+						const encoder = new TextEncoder();
+						const contextData = encoder.encode(`data: ${JSON.stringify({ context: retrievedContext })}\n\n`);
+						controller.enqueue(contextData);
+					}
+					
 					// Send conversation ID and end signal
 					const encoder = new TextEncoder();
 					const conversationData = encoder.encode(`data: ${JSON.stringify({ conversationId })}\n\n`);
