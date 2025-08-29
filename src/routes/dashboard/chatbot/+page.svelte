@@ -45,6 +45,10 @@
 	let wordBuffer: string[] = [];
 	let wordStreamingInterval: NodeJS.Timeout | null = null;
 
+	// Delete conversation state
+	let conversationToDelete: string | null = null;
+	let showDeleteConfirmation = false;
+
 	// Persist/restore UI state (conversation + active node)
 	const UI_STATE_KEY = 'chat_ui_state_v1';
 	let restoredConversationId: string | null = null;
@@ -223,6 +227,65 @@
 			showHistory = false;
 			editingMessageId = null;
 			editingContent = '';
+		}
+	}
+
+	// Delete conversation functions
+	function showDeleteDialog(conversationId: string, event: Event) {
+		event.stopPropagation(); // Prevent loading the conversation
+		conversationToDelete = conversationId;
+		showDeleteConfirmation = true;
+	}
+
+	function cancelDelete() {
+		conversationToDelete = null;
+		showDeleteConfirmation = false;
+	}
+
+	async function confirmDelete() {
+		if (!conversationToDelete) return;
+
+		try {
+			const response = await fetch(`/api/conversation/${conversationToDelete}`, {
+				method: 'DELETE'
+			});
+
+			if (response.ok) {
+				// Remove from local state and force reactivity
+				delete conversations[conversationToDelete];
+				conversations = { ...conversations }; // Force Svelte reactivity with new object
+				
+				// If we deleted the current conversation, switch to a different one or start new
+				if (currentConversationId === conversationToDelete) {
+					const remainingConversations = Object.keys(conversations);
+					if (remainingConversations.length > 0) {
+						loadConversation(remainingConversations[0]);
+					} else {
+						// No conversations left, start fresh
+						currentConversationId = null;
+						currentNodeId = null;
+						// Clear UI state from localStorage
+						if (typeof window !== 'undefined') {
+							localStorage.removeItem(UI_STATE_KEY);
+						}
+						startNewChat();
+					}
+				}
+
+				// Save updated UI state
+				saveUIState();
+
+				console.log('Successfully deleted conversation:', conversationToDelete);
+			} else {
+				const error = await response.text();
+				console.error('Failed to delete conversation:', error);
+				alert('Failed to delete conversation. Please try again.');
+			}
+		} catch (error) {
+			console.error('Error deleting conversation:', error);
+			alert('Error deleting conversation. Please try again.');
+		} finally {
+			cancelDelete();
 		}
 	}
 
@@ -717,10 +780,11 @@
 						</div>
 					{:else}
 						{#each conversationList as conversation}
-								<button
+							<div class="relative group p-2 lg:p-3 rounded-lg hover:bg-blue-50 transition-all duration-200 border-2 border-gray-100 hover:border-blue-200 hover:shadow-sm cursor-pointer {currentConversationId === conversation.id ? 'bg-blue-50 border-blue-200' : ''}"
 									on:click={() => loadConversation(conversation.id)}
-									class="w-full text-left p-2 lg:p-3 rounded-lg hover:bg-blue-50 transition-all duration-200 border-2 border-gray-100 hover:border-blue-200 hover:shadow-sm"
-								>
+								 role="button"
+								 tabindex="0"
+								 on:keydown={(e) => e.key === 'Enter' && loadConversation(conversation.id)}>
 									<div class="flex items-start space-x-2 lg:space-x-3">
 										<div class="w-6 h-6 lg:w-8 lg:h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
 											<svg class="w-3 h-3 lg:w-4 lg:h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -728,20 +792,30 @@
 											</svg>
 										</div>
 										<div class="flex-1 min-w-0">
-											<div class="flex items-center space-x-2 mb-1">
-												<p class="text-xs lg:text-sm font-medium text-gray-900 truncate">
+										<div class="flex items-center justify-between mb-1">
+											<p class="text-xs lg:text-sm font-medium text-gray-900 truncate pr-2">
 													{conversation.title}
 												</p>
+											<button
+												on:click={(e) => showDeleteDialog(conversation.id, e)}
+												class="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded transition-all duration-200 flex-shrink-0"
+												title="Delete conversation"
+												aria-label="Delete conversation"
+											>
+												<svg class="w-3 h-3 text-red-500 hover:text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+												</svg>
+											</button>
 											</div>
 											<p class="text-xs text-gray-500">
 												{conversation.lastMessage}
 											</p>
 											<p class="text-xs text-gray-400">
 												{new Date(conversation.createdAt).toLocaleDateString()}
-													</p>
+											</p>
+										</div>
+									</div>
 												</div>
-											</div>
-										</button>
 						{/each}
 					{/if}
 				</div>
@@ -1121,3 +1195,41 @@
 		</div>
 	</div>
 </div>
+
+<!-- Delete Confirmation Modal -->
+{#if showDeleteConfirmation}
+	<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+		<div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+			<div class="flex items-center space-x-3 mb-4">
+				<div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+					<svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+					</svg>
+				</div>
+				<div>
+					<h3 class="text-lg font-semibold text-gray-900">Delete Conversation</h3>
+					<p class="text-sm text-gray-500">This action cannot be undone</p>
+				</div>
+			</div>
+			
+			<p class="text-gray-700 mb-6">
+				Are you sure you want to delete this conversation? All messages in this conversation will be permanently removed.
+			</p>
+			
+			<div class="flex space-x-3">
+				<button
+					on:click={cancelDelete}
+					class="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+				>
+					Cancel
+				</button>
+				<button
+					on:click={confirmDelete}
+					class="flex-1 px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+				>
+					Delete
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
