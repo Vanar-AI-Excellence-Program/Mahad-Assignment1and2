@@ -1,0 +1,130 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "id": "0006_add_rag_tables",
+  "prevId": "0005_add_branching_support",
+  "tables": {
+    "documents": {
+      "name": "documents",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "mime",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "size_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      ],
+      "foreignKeys": [],
+      "indexes": [],
+      "uniqueConstraints": []
+    },
+    "chunks": {
+      "name": "chunks",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "document_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "embedding",
+          "type": "vector(768)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "chunk_index",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "chunks_document_id_documents_id_fk",
+          "tableName": "chunks",
+          "columnNames": ["document_id"],
+          "referencedTableName": "documents",
+          "referencedColumnNames": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "chunks_embedding_idx",
+          "tableName": "chunks",
+          "columns": ["embedding"],
+          "isUnique": false,
+          "isPrimary": false,
+          "isUniqueConstraint": false
+        },
+        {
+          "name": "chunks_document_id_idx",
+          "tableName": "chunks",
+          "columns": ["document_id"],
+          "isUnique": false,
+          "isPrimary": false,
+          "isUniqueConstraint": false
+        }
+      ],
+      "uniqueConstraints": []
+    }
+  }
+}

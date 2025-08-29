@@ -1,0 +1,568 @@
+{
+  "id": "0007_fix_vector_schema",
+  "prevId": "0006_add_rag_tables",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "chats": {
+      "name": "chats",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "parent_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false,
+          "default": null
+        },
+        {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "children",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'[]'"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "chats_pkey",
+          "columns": ["id"],
+          "isUnique": true,
+          "isPrimary": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "chats_user_id_users_id_fk",
+          "tableName": "chats",
+          "columns": ["user_id"],
+          "referencedTableName": "users",
+          "referencedColumns": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        {
+          "name": "chats_parent_id_chats_id_fk",
+          "tableName": "chats",
+          "columns": ["parent_id"],
+          "referencedTableName": "chats",
+          "referencedColumns": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      ]
+    },
+    "chunks": {
+      "name": "chunks",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "document_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "embedding",
+          "type": "vector(768)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "chunk_index",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "chunks_pkey",
+          "columns": ["id"],
+          "isUnique": true,
+          "isPrimary": false
+        },
+        {
+          "name": "chunks_embedding_idx",
+          "columns": ["embedding"],
+          "isUnique": false,
+          "isPrimary": false
+        },
+        {
+          "name": "chunks_document_id_idx",
+          "columns": ["document_id"],
+          "isUnique": false,
+          "isPrimary": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "chunks_document_id_documents_id_fk",
+          "tableName": "chunks",
+          "columns": ["document_id"],
+          "referencedTableName": "documents",
+          "referencedColumns": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      ]
+    },
+    "conversation_branches": {
+      "name": "conversation_branches",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "conversation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "branch_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "fork_point_message_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false,
+          "default": null
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "true"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "conversation_branches_pkey",
+          "columns": ["id"],
+          "isUnique": true,
+          "isPrimary": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "conversation_branches_user_id_users_id_fk",
+          "tableName": "conversation_branches",
+          "columns": ["user_id"],
+          "referencedTableName": "users",
+          "referencedColumns": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      ]
+    },
+    "documents": {
+      "name": "documents",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "mime",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "size_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "documents_pkey",
+          "columns": ["id"],
+          "isUnique": true,
+          "isPrimary": false
+        }
+      ],
+      "foreignKeys": []
+    },
+    "sessions": {
+      "name": "sessions",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "session_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "expires",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sessions_pkey",
+          "columns": ["id"],
+          "isUnique": true,
+          "isPrimary": false
+        },
+        {
+          "name": "sessions_session_token_unique",
+          "columns": ["session_token"],
+          "isUnique": true,
+          "isPrimary": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "sessions_user_id_users_id_fk",
+          "tableName": "sessions",
+          "columns": ["user_id"],
+          "referencedTableName": "users",
+          "referencedColumns": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      ]
+    },
+    "user_profiles": {
+      "name": "user_profiles",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "first_name",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": null
+        },
+        {
+          "name": "last_name",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        {
+          "name": "avatar",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": null
+        },
+        {
+          "name": "bio",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "user_profiles_pkey",
+          "columns": ["id"],
+          "isUnique": true,
+          "isPrimary": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "user_profiles_user_id_users_id_fk",
+          "tableName": "user_profiles",
+          "columns": ["user_id"],
+          "referencedTableName": "users",
+          "referencedColumns": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      ]
+    },
+    "users": {
+      "name": "users",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "name": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "hashed_password",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "role",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'user'"
+        },
+        {
+          "name": "email_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        {
+          "name": "updated_at",
+        "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "users_email_unique",
+          "columns": ["email"],
+          "isUnique": true,
+          "isPrimary": false
+        },
+        {
+          "name": "users_pkey",
+          "columns": ["id"],
+          "isUnique": true,
+          "isPrimary": false
+        }
+      ],
+      "foreignKeys": []
+    },
+    "verification_tokens": {
+      "name": "verification_tokens",
+      "schema": "",
+      "columns": [
+        {
+          "name": "identifier",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "token",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "expires",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": null
+        },
+        {
+          "name": "type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'email-verification'"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "verification_tokens_identifier_token_pk",
+          "columns": ["identifier", "token"],
+          "isUnique": true,
+          "isPrimary": false
+        }
+      ],
+      "foreignKeys": []
+    }
+  }
+}

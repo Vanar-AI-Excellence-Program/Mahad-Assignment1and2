@@ -21,6 +21,7 @@ export const config = {
 	GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
 	GITHUB_CLIENT_ID: env.GITHUB_CLIENT_ID,
 	GITHUB_CLIENT_SECRET: env.GITHUB_CLIENT_SECRET,
+	EMBEDDING_API_URL: env.EMBEDDING_API_URL || 'http://localhost:8000/embed',
 } as const;
 
 // Validate required environment variables

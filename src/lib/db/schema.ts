@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, uuid, boolean, varchar, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, boolean, varchar, primaryKey, integer } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { relations } from 'drizzle-orm';
 
 // Users table
@@ -43,16 +44,28 @@ export const userProfiles = pgTable('user_profiles', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Chat messages table
+// Chat messages table with tree structure support
 export const chats = pgTable('chats', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  parentId: uuid('parent_id').references(() => chats.id, { onDelete: 'cascade' }),
+  parentId: uuid('parent_id').references((): any => chats.id, { onDelete: 'cascade' }),
   role: text('role', { enum: ['user', 'assistant'] }).notNull(),
   content: text('content').notNull(),
-  isEdited: boolean('is_edited').default(false),
-  originalContent: text('original_content'),
+  children: text('children').default('[]'), // JSON array of child message IDs
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Conversation branches table - stores branch metadata for navigation
+export const conversationBranches = pgTable('conversation_branches', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  conversationId: uuid('conversation_id').notNull(), // Root message ID of the conversation
+  branchName: text('branch_name').notNull(),
+  forkPointMessageId: uuid('fork_point_message_id'), // The message where this branch was forked from
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 // Relations
@@ -63,6 +76,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   sessions: many(sessions),
   chats: many(chats),
+  conversationBranches: many(conversationBranches),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -92,6 +106,47 @@ export const chatsRelations = relations(chats, ({ one, many }) => ({
   children: many(chats, {
     relationName: 'chat_parent_child',
   }),
+
+}));
+
+export const conversationBranchesRelations = relations(conversationBranches, ({ one, many }) => ({
+  user: one(users, {
+    fields: [conversationBranches.userId],
+    references: [users.id],
+  }),
+  messages: many(chats),
+}));
+
+// RAG System Tables
+export const documents = pgTable('documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  mime: text('mime').notNull(),
+  size_bytes: integer('size_bytes').notNull(),
+  conversation_id: uuid('conversation_id').references(() => chats.id, { onDelete: 'cascade' }),
+  created_at: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const chunks = pgTable('chunks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  document_id: uuid('document_id').notNull().references(() => documents.id, { onDelete: 'cascade' }),
+  conversation_id: uuid('conversation_id').references(() => chats.id, { onDelete: 'cascade' }),
+  content: text('content').notNull(),
+  embedding: text('embedding').notNull(), // Store as text, will be converted to vector(3072) in database
+  chunk_index: integer('chunk_index').notNull(),
+  created_at: timestamp('created_at').defaultNow().notNull(),
+});
+
+// RAG Relations
+export const documentsRelations = relations(documents, ({ many }) => ({
+  chunks: many(chunks),
+}));
+
+export const chunksRelations = relations(chunks, ({ one }) => ({
+  document: one(documents, {
+    fields: [chunks.document_id],
+    references: [documents.id],
+  }),
 }));
 
 // Types for TypeScript
@@ -105,3 +160,13 @@ export type UserProfile = typeof userProfiles.$inferSelect;
 export type NewUserProfile = typeof userProfiles.$inferInsert;
 export type Chat = typeof chats.$inferSelect;
 export type NewChat = typeof chats.$inferInsert;
+export type ConversationBranch = typeof conversationBranches.$inferSelect;
+export type NewConversationBranch = typeof conversationBranches.$inferInsert;
+export type Document = typeof documents.$inferSelect;
+export type NewDocument = typeof documents.$inferInsert;
+export type Chunk = typeof chunks.$inferSelect;
+export type NewChunk = typeof chunks.$inferInsert;
+
+// SQL functions for pgvector
+export const createVectorExtension = sql`CREATE EXTENSION IF NOT EXISTS vector`;
+export const createVectorIndex = sql`CREATE INDEX IF NOT EXISTS chunks_embedding_idx ON chunks USING ivfflat (embedding::vector(3072)) WITH (lists = 100)`;

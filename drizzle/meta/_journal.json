@@ -29,6 +29,34 @@
       "when": 1755269177622,
       "tag": "0003_misty_butterfly",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1756114952451,
+      "tag": "0004_cooing_shape",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1756114952452,
+      "tag": "0005_add_branching_support",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1756114952453,
+      "tag": "0006_add_rag_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1756114952454,
+      "tag": "0007_fix_vector_schema",
+      "breakpoints": true
     }
   ]
 }
