@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { 
 		dbChatsToTree,
 		getActivePath,
@@ -36,6 +35,15 @@
 	let editingMessageId: string | null = null;
 	let editingContent = '';
 	let autoScrollRequested = false;
+	
+	// Temporary state for immediate UI updates
+	let pendingUserMessage: string | null = null;
+	let streamingAIResponse = '';
+	let streamingActive = false;
+	
+	// Word-by-word streaming state
+	let wordBuffer: string[] = [];
+	let wordStreamingInterval: NodeJS.Timeout | null = null;
 
 	// Persist/restore UI state (conversation + active node)
 	const UI_STATE_KEY = 'chat_ui_state_v1';
@@ -57,14 +65,56 @@
 	}
 
 	function saveUIState() {
-		try {
-			localStorage.setItem(UI_STATE_KEY, JSON.stringify({
-				conversationId: currentConversationId,
-				nodeId: currentNodeId
-			}));
-		} catch (e) {
-			console.warn('Failed to save UI state:', e);
+		if (typeof window !== 'undefined') {
+			try {
+				localStorage.setItem(UI_STATE_KEY, JSON.stringify({
+					conversationId: currentConversationId,
+					nodeId: currentNodeId
+				}));
+			} catch (e) {
+				console.warn('Failed to save UI state:', e);
+			}
 		}
+	}
+
+	// Word-by-word streaming functions
+	function startWordStreaming() {
+		if (wordStreamingInterval) {
+			clearInterval(wordStreamingInterval);
+		}
+		
+		wordStreamingInterval = setInterval(() => {
+			if (wordBuffer.length > 0) {
+				const nextWord = wordBuffer.shift();
+				if (nextWord) {
+					streamingAIResponse += (streamingAIResponse ? ' ' : '') + nextWord;
+					streamingAIResponse = streamingAIResponse; // Trigger reactivity
+				}
+			} else if (!streamingActive) {
+				// No more words in buffer and streaming is done
+				stopWordStreaming();
+			}
+		}, 80); // 80ms delay between words for smooth effect
+	}
+
+	function stopWordStreaming() {
+		if (wordStreamingInterval) {
+			clearInterval(wordStreamingInterval);
+			wordStreamingInterval = null;
+		}
+		// Flush any remaining words immediately
+		if (wordBuffer.length > 0) {
+			const remainingWords = wordBuffer.join(' ');
+			streamingAIResponse += (streamingAIResponse ? ' ' : '') + remainingWords;
+			streamingAIResponse = streamingAIResponse;
+			wordBuffer = [];
+		}
+	}
+
+	function addWordsToBuffer(text: string) {
+		// Split text into words and add to buffer
+		const words = text.trim().split(/\s+/).filter(word => word.length > 0);
+		wordBuffer.push(...words);
 	}
 	
 	// Computed values for current conversation
@@ -114,18 +164,23 @@
 				
 				console.log('Converted conversations to trees:', conversations);
 				
-				// Restore previously active conversation/node if available
+				// Preserve current conversation during reload, or restore from localStorage
+				const conversationToUse = currentConversationId || restoredConversationId;
+				
 				if (!hasAppliedRestore && restoredConversationId && conversations[restoredConversationId]) {
 					hasAppliedRestore = true;
-					currentConversationId = restoredConversationId;
-					if (restoredNodeId && conversations[restoredConversationId][restoredNodeId]) {
+					// Only switch conversation if we don't already have one active
+					if (!currentConversationId) {
+						currentConversationId = restoredConversationId;
+					}
+					if (restoredNodeId && conversationToUse && conversations[conversationToUse] && conversations[conversationToUse][restoredNodeId]) {
 						currentNodeId = restoredNodeId;
 						console.log('Restored node:', currentNodeId);
-					} else {
-						const nodes = Object.values(conversations[restoredConversationId]).sort((a, b) =>
+					} else if (!currentNodeId && conversationToUse && conversations[conversationToUse]) {
+						const nodes = Object.values(conversations[conversationToUse]).sort((a: any, b: any) =>
 							new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
 						);
-						currentNodeId = nodes.length > 0 ? nodes[nodes.length - 1].id : null;
+						currentNodeId = nodes.length > 0 ? (nodes[nodes.length - 1] as any).id : null;
 					}
 				} else if (!currentConversationId && Object.keys(conversations).length > 0) {
 					// Default: first conversation and its sensible node (latest assistant or its user)
@@ -133,6 +188,8 @@
 					currentNodeId = getDefaultNodeIdForConversation(conversations[currentConversationId]);
 					console.log('Set current conversation to:', currentConversationId);
 				}
+				
+				console.log('After loadChatHistory - currentConversationId:', currentConversationId, 'currentNodeId:', currentNodeId);
 			} else {
 				console.error('Failed to load chat history');
 			}
@@ -318,6 +375,13 @@
 			const userMessage = input.trim();
 			input = '';
 			
+			// Immediately show user message in UI
+			pendingUserMessage = userMessage;
+			streamingAIResponse = '';
+			streamingActive = false;
+			wordBuffer = [];
+			stopWordStreaming(); // Clear any existing streaming
+			
 			try {
 				isLoading = true;
 			
@@ -360,37 +424,71 @@
 								if (line.startsWith('data: ')) {
 									const data = line.slice(6);
 									if (data === '[DONE]') {
-											// Streaming complete, reload chat history
-											console.log('Streaming complete, reloading chat history...');
-											autoScrollRequested = true;
-											await loadChatHistory();
-											console.log('Chat history reloaded, current tree size:', Object.keys(currentChatTree).length);
+											// Streaming complete, clear pending state and reload chat history
+											console.log('✅ Streaming complete, finishing word streaming...');
+											streamingActive = false;
+											stopWordStreaming(); // Finish any remaining words immediately
+											
+											// Wait a moment for word streaming to complete, then reload
+											setTimeout(async () => {
+												pendingUserMessage = null;
+												streamingAIResponse = '';
+												autoScrollRequested = true;
+												await loadChatHistory();
+												console.log('Chat history reloaded, current tree size:', Object.keys(currentChatTree).length);
 
-											// Navigate to the latest AI response
-											const latestAIMessage = Object.values(currentChatTree).find(node =>
-												node.role === 'assistant' &&
-												node.parentId &&
-												currentChatTree[node.parentId]?.content === userMessage
-											);
+											// Navigate to the latest AI response in the current conversation
+											// Find the newest user message with the content we just sent
+											const newUserMessage = Object.values(currentChatTree)
+												.filter(node => 
+													node.role === 'user' && 
+													node.content === userMessage &&
+													node.conversationId === currentConversationId
+												)
+												.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 
-											if (latestAIMessage) {
-												currentNodeId = latestAIMessage.id;
-												console.log('Navigated to latest AI response:', latestAIMessage.id, 'Content:', latestAIMessage.content.substring(0, 100));
+											if (newUserMessage) {
+												// Find the AI response that's a child of this specific user message
+												const latestAIMessage = Object.values(currentChatTree).find(node =>
+													node.role === 'assistant' &&
+													node.parentId === newUserMessage.id
+												);
+
+												if (latestAIMessage) {
+													currentNodeId = latestAIMessage.id;
+													console.log('Navigated to latest AI response:', latestAIMessage.id, 'for user message:', newUserMessage.id);
+													// Ensure we save the UI state with the correct conversation
+													saveUIState();
 										} else {
-												console.log('No AI response found for user message:', userMessage);
-												console.log('Available messages:', Object.values(currentChatTree).map(m => ({ role: m.role, content: m.content.substring(0, 50), parentId: m.parentId })));
+													console.log('No AI response found for new user message:', newUserMessage.id);
+												}
+											} else {
+												console.log('No new user message found with content:', userMessage);
+												console.log('Available messages:', Object.values(currentChatTree).map(m => ({ 
+													role: m.role, 
+													content: m.content.substring(0, 50), 
+													parentId: m.parentId,
+													conversationId: m.conversationId 
+												})));
 											}
+												}, 200); // Wait 200ms for word streaming to complete
 										break;
 										} else {
 									try {
 										const parsed = JSON.parse(data);
 										if (parsed.chunk) {
-													accumulatedResponse += parsed.chunk;
-													console.log('Received chunk:', parsed.chunk);
-													console.log('Accumulated response so far:', accumulatedResponse);
+											if (!streamingActive) {
+												streamingActive = true;
+												startWordStreaming(); // Start word-by-word streaming
+											}
+											
+											// Add words from this chunk to the buffer
+											addWordsToBuffer(parsed.chunk);
+											console.log('📝 Chunk received, added to word buffer:', parsed.chunk);
+											console.log('📄 Words in buffer:', wordBuffer.length, 'Current display length:', streamingAIResponse.length);
 										}
 									} catch (e) {
-												console.log('Failed to parse chunk data:', data, e);
+										console.log('Failed to parse chunk data:', data, e);
 									}
 								}
 							}
@@ -401,18 +499,32 @@
 					}
 										} else {
 						// Fallback: reload chat history if streaming fails
+						streamingActive = false;
+						stopWordStreaming();
+						pendingUserMessage = null;
+						streamingAIResponse = '';
 						await loadChatHistory();
 
-						// Navigate to the latest AI response
-						const latestAIMessage = Object.values(currentChatTree).find(node =>
-							node.role === 'assistant' &&
-							node.parentId &&
-							currentChatTree[node.parentId]?.content === userMessage
-						);
+						// Navigate to the latest AI response in the current conversation
+						const newUserMessage = Object.values(currentChatTree)
+							.filter(node => 
+								node.role === 'user' && 
+								node.content === userMessage &&
+								node.conversationId === currentConversationId
+							)
+							.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 
-						if (latestAIMessage) {
-							currentNodeId = latestAIMessage.id;
-							console.log('Navigated to latest AI response:', latestAIMessage.id);
+						if (newUserMessage) {
+							const latestAIMessage = Object.values(currentChatTree).find(node =>
+								node.role === 'assistant' &&
+								node.parentId === newUserMessage.id
+							);
+
+							if (latestAIMessage) {
+								currentNodeId = latestAIMessage.id;
+								console.log('Navigated to latest AI response:', latestAIMessage.id);
+								saveUIState();
+							}
 						}
 														}
 													} else {
@@ -423,6 +535,11 @@
 												} catch (error) {
 				console.error('Chat error:', error);
 				alert('Error sending message. Please try again.');
+				// Clear pending state on error
+				streamingActive = false;
+				stopWordStreaming();
+				pendingUserMessage = null;
+				streamingAIResponse = '';
 			} finally {
 				isLoading = false;
 			}
@@ -542,12 +659,15 @@
 		loadChatHistory();
 	});
 
-	// Auto-scroll to bottom when messages change
-	$: if (messages.length > 0) {
-		if (autoScrollRequested) {
-			setTimeout(() => {
-				const chatContainer = document.getElementById('chat-container');
-				if (chatContainer) {
+	// Auto-scroll to bottom when messages change, pending messages appear, or streaming updates
+	$: if (messages.length > 0 || pendingUserMessage || streamingAIResponse) {
+		if (autoScrollRequested || pendingUserMessage || streamingActive) {
+			if (streamingActive) {
+				console.log('🔄 Auto-scrolling due to streaming update, response length:', streamingAIResponse.length);
+			}
+		setTimeout(() => {
+			const chatContainer = document.getElementById('chat-container');
+			if (chatContainer) {
 					chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
 				}
 				autoScrollRequested = false;
@@ -558,6 +678,7 @@
 	// Save UI state on component destroy
 	onDestroy(() => {
 		saveUIState();
+		stopWordStreaming(); // Clean up any active streaming
 	});
 </script>
 
@@ -889,7 +1010,29 @@
 						</div>
 					{/each}
 
-						{#if isLoading}
+					<!-- Pending user message (shown immediately when submitted) -->
+					{#if pendingUserMessage}
+						<div class="flex justify-end">
+							<div class="max-w-xs sm:max-w-md lg:max-w-2xl px-3 lg:px-6 py-3 lg:py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-sm hover:shadow-md transition-shadow">
+								<div class="flex items-center space-x-2 lg:space-x-3 mb-2">
+									<div class="w-6 h-6 lg:w-8 lg:h-8 bg-white/20 rounded-full flex items-center justify-center">
+										<svg class="w-3 h-3 lg:w-4 lg:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+										</svg>
+									</div>
+									<span class="text-xs lg:text-sm font-semibold text-white/90">You</span>
+								</div>
+								<MessageRenderer 
+									content={pendingUserMessage} 
+									isLoading={false}
+									isError={false}
+								/>
+							</div>
+						</div>
+					{/if}
+
+					<!-- AI response (thinking state or streaming) -->
+					{#if pendingUserMessage && isLoading}
 						<div class="flex justify-start">
 							<div class="max-w-xs sm:max-w-md lg:max-w-2xl px-3 lg:px-6 py-3 lg:py-4 rounded-2xl bg-white border-2 border-gray-100 shadow-sm hover:shadow-md transition-shadow">
 								<div class="flex items-center space-x-2 lg:space-x-3 mb-2">
@@ -900,6 +1043,21 @@
 									</div>
 									<span class="text-xs lg:text-sm font-semibold text-blue-600">AI Assistant</span>
 								</div>
+								
+								{#if streamingAIResponse && streamingActive}
+									<!-- Show streaming response -->
+									<div class="relative">
+										<MessageRenderer 
+											content={streamingAIResponse} 
+											isLoading={false}
+											isError={false}
+										/>
+										<!-- Typing cursor for active streaming -->
+										<span class="inline-block w-0.5 h-4 bg-blue-500 ml-1 animate-pulse"></span>
+									</div>
+
+								{:else}
+									<!-- Show thinking animation -->
 								<div class="flex items-center space-x-2">
 									<span class="text-sm lg:text-base text-gray-700 font-medium">Thinking</span>
 									<div class="flex space-x-1">
@@ -908,9 +1066,10 @@
 										<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
 									</div>
 								</div>
+								{/if}
 							</div>
 						</div>
-						{/if}
+					{/if}
 					{/if}
 				</div>
 			</div>
