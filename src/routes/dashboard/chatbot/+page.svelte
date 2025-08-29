@@ -36,6 +36,14 @@
 	let editingContent = '';
 	let autoScrollRequested = false;
 	
+	// Search state
+	let searchQuery = '';
+	let showSearchResults = false;
+	let searchResults: any[] = [];
+	let isSearching = false;
+	let searchSuggestions: string[] = [];
+	let showSuggestions = false;
+	
 	// Temporary state for immediate UI updates
 	let pendingUserMessage: string | null = null;
 	let streamingAIResponse = '';
@@ -148,6 +156,18 @@
 		createdAt: getConversationCreatedAt(conversations[convId])
 	})).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
+	// Filtered conversation list based on search
+	$: filteredConversationList = searchQuery.trim() 
+		? conversationList.filter(conv => 
+			conv.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+			conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase()) ||
+			// Search within conversation messages
+			Object.values(conversations[conv.id] || {}).some(message => 
+				message.content.toLowerCase().includes(searchQuery.toLowerCase())
+			)
+		)
+		: conversationList;
+
 	// Load chat history from database
 	async function loadChatHistory() {
 		try {
@@ -228,6 +248,68 @@
 			editingMessageId = null;
 			editingContent = '';
 		}
+	}
+
+	// Search functions
+	async function performAdvancedSearch(query: string) {
+		if (!query.trim()) {
+			searchResults = [];
+			showSearchResults = false;
+			return;
+		}
+
+		try {
+			isSearching = true;
+			const response = await fetch('/api/search/conversations', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ query: query.trim() })
+			});
+
+			if (response.ok) {
+				const results = await response.json();
+				searchResults = results;
+				showSearchResults = true;
+			} else {
+				console.error('Search API error:', await response.text());
+				// Fallback to local search
+				searchResults = filteredConversationList;
+				showSearchResults = true;
+			}
+		} catch (error) {
+			console.error('Search error:', error);
+			// Fallback to local search
+			searchResults = filteredConversationList;
+			showSearchResults = true;
+		} finally {
+			isSearching = false;
+		}
+	}
+
+	function clearSearch() {
+		searchQuery = '';
+		searchResults = [];
+		showSearchResults = false;
+	}
+
+	function highlightSearchTerm(text: string, searchTerm: string): string {
+		if (!searchTerm.trim()) return text;
+		
+		const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+		return text.replace(regex, '<mark class="bg-yellow-200 px-1 rounded">$1</mark>');
+	}
+
+	// Handle search input with debouncing
+	let searchTimeout: NodeJS.Timeout;
+	function handleSearchInput() {
+		clearTimeout(searchTimeout);
+		searchTimeout = setTimeout(() => {
+			if (searchQuery.trim().length > 2) {
+				performAdvancedSearch(searchQuery);
+			} else if (searchQuery.trim().length === 0) {
+				clearSearch();
+			}
+		}, 300); // 300ms debounce
 	}
 
 	// Delete conversation functions
@@ -716,10 +798,35 @@
 		return versionInfo;
 	}
 
+	// Keyboard shortcuts
+	function handleKeydown(event: KeyboardEvent) {
+		// Ctrl/Cmd + K to focus search
+		if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
+			event.preventDefault();
+			const searchInput = document.querySelector('input[placeholder="Search conversations..."]') as HTMLInputElement;
+			if (searchInput) {
+				searchInput.focus();
+				showHistory = true;
+			}
+		}
+		
+		// Escape to clear search
+		if (event.key === 'Escape' && searchQuery.trim()) {
+			clearSearch();
+		}
+	}
+
 	// Load chat history on mount
 	onMount(() => {
 		loadUIState();
 		loadChatHistory();
+		
+		// Add global keyboard event listener
+		document.addEventListener('keydown', handleKeydown);
+		
+		return () => {
+			document.removeEventListener('keydown', handleKeydown);
+		};
 	});
 
 	// Auto-scroll to bottom when messages change, pending messages appear, or streaming updates
@@ -764,7 +871,70 @@
 							New Chat
 						</button>
 					</div>
-					<p class="text-sm text-gray-600">Your previous conversations</p>
+					
+					<!-- Search Input -->
+					<div class="relative mb-4">
+						<div class="relative">
+							<input
+								bind:value={searchQuery}
+								on:input={handleSearchInput}
+								on:keydown={(e) => {
+									if (e.key === 'Enter' && searchQuery.trim()) {
+										performAdvancedSearch(searchQuery);
+									}
+								}}
+								type="text"
+								placeholder="Search conversations... (Ctrl+K)"
+								class="w-full pl-10 pr-20 py-2.5 text-sm border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all duration-200 bg-gray-50 hover:bg-white focus:bg-white"
+							/>
+							<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+								{#if isSearching}
+									<svg class="w-4 h-4 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+									</svg>
+								{:else}
+									<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+									</svg>
+								{/if}
+							</div>
+							<div class="absolute inset-y-0 right-0 flex items-center">
+								{#if searchQuery}
+									<button
+										on:click={clearSearch}
+										class="pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+										title="Clear search (Esc)"
+										aria-label="Clear search"
+									>
+										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+										</svg>
+									</button>
+								{:else}
+									<div class="pr-3 flex items-center">
+										<kbd class="px-2 py-1 text-xs font-semibold text-gray-500 bg-gray-100 border border-gray-200 rounded-lg">
+											⌘K
+										</kbd>
+									</div>
+								{/if}
+							</div>
+						</div>
+					</div>
+
+					{#if searchQuery.trim()}
+						<div class="flex items-center justify-between mb-2">
+							<p class="text-xs text-gray-500">
+								{showSearchResults ? searchResults.length : filteredConversationList.length} result{showSearchResults ? (searchResults.length !== 1 ? 's' : '') : (filteredConversationList.length !== 1 ? 's' : '')} 
+								for "{searchQuery}"
+							</p>
+							{#if showSearchResults && searchResults.length > 0}
+								<span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Advanced Search</span>
+							{/if}
+						</div>
+					{:else}
+						<p class="text-sm text-gray-600">Your previous conversations</p>
+					{/if}
 				</div>
 				
 				<div class="flex-1 overflow-y-auto p-3 lg:p-4 space-y-3 max-h-64 lg:max-h-none">
@@ -779,7 +949,19 @@
 							<p class="text-xs text-gray-400">Start a new chat to begin</p>
 						</div>
 					{:else}
-						{#each conversationList as conversation}
+						{@const displayList = showSearchResults ? searchResults : (searchQuery.trim() ? filteredConversationList : conversationList)}
+						{#if searchQuery.trim() && displayList.length === 0}
+							<div class="text-center text-gray-500 py-6 lg:py-8">
+								<div class="w-12 h-12 lg:w-16 lg:h-16 mx-auto mb-3 lg:mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+									<svg class="w-6 h-6 lg:w-8 lg:h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+									</svg>
+								</div>
+								<p class="text-sm">No conversations found</p>
+								<p class="text-xs text-gray-400">Try a different search term</p>
+							</div>
+						{:else}
+							{#each displayList as conversation}
 							<div class="relative group p-2 lg:p-3 rounded-lg hover:bg-blue-50 transition-all duration-200 border-2 border-gray-100 hover:border-blue-200 hover:shadow-sm cursor-pointer {currentConversationId === conversation.id ? 'bg-blue-50 border-blue-200' : ''}"
 									on:click={() => loadConversation(conversation.id)}
 								 role="button"
@@ -794,8 +976,12 @@
 										<div class="flex-1 min-w-0">
 										<div class="flex items-center justify-between mb-1">
 											<p class="text-xs lg:text-sm font-medium text-gray-900 truncate pr-2">
+												{#if searchQuery.trim()}
+													{@html highlightSearchTerm(conversation.title, searchQuery)}
+												{:else}
 													{conversation.title}
-												</p>
+												{/if}
+											</p>
 											<button
 												on:click={(e) => showDeleteDialog(conversation.id, e)}
 												class="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded transition-all duration-200 flex-shrink-0"
@@ -808,15 +994,25 @@
 											</button>
 											</div>
 											<p class="text-xs text-gray-500">
-												{conversation.lastMessage}
+												{#if searchQuery.trim()}
+													{@html highlightSearchTerm(conversation.lastMessage, searchQuery)}
+												{:else}
+													{conversation.lastMessage}
+												{/if}
 											</p>
 											<p class="text-xs text-gray-400">
 												{new Date(conversation.createdAt).toLocaleDateString()}
+												{#if conversation.relevanceScore && showSearchResults}
+													<span class="ml-2 text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">
+														{Math.round(conversation.relevanceScore * 100)}% match
+													</span>
+												{/if}
 											</p>
 										</div>
 									</div>
 												</div>
-						{/each}
+							{/each}
+						{/if}
 					{/if}
 				</div>
 			</div>
