@@ -2,7 +2,7 @@ import { google } from '@ai-sdk/google';
 import { streamText } from 'ai';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { sessions, chats, documents, chunks } from '$lib/db/schema';
+import { sessions, chats, conversations, type Chat, type Conversation, documents, chunks } from '$lib/db/schema';
 import { forkingSystem } from '$lib/forking-system';
 import { forkingAdapter } from '$lib/db/forking-adapter';
 import { eq, and, gt, inArray, sql } from 'drizzle-orm';
@@ -258,19 +258,42 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 			return new Response('Unauthorized', { status: 401 });
 		}
 
-		const { messages, parentId, isEditing = false, editMessageId }: {
-			messages: ChatMessage[];
-			parentId?: string;
-			isEditing?: boolean;
-			editMessageId?: string;
-		} = await request.json();
-		
-		console.log('🔧 [API] Request details:', {
-			isEditing,
-			editMessageId,
-			parentId,
-			messageCount: messages.length
-		});
+		const { messages, parentId, conversationId }: { messages: ChatMessage[]; parentId?: string; conversationId?: string } = await request.json();
+
+		// Ensure we have a valid conversation ID
+		let validConversationId = conversationId;
+
+		// Check if conversation exists, create it if it doesn't
+		if (!validConversationId) {
+			const userMessage = messages[messages.length - 1];
+			const title = userMessage.content.slice(0, 100);
+
+			const [newConversation] = await db.insert(conversations).values({
+				userId: session.user.id,
+				title: title
+			}).returning();
+
+			validConversationId = newConversation.id;
+		} else {
+			// Check if the provided conversation ID exists
+			const existingConversation = await db.query.conversations.findFirst({
+				where: eq(conversations.id, validConversationId)
+			});
+
+			// If conversation doesn't exist, create it
+			if (!existingConversation) {
+				const userMessage = messages[messages.length - 1];
+				const title = userMessage.content.slice(0, 100);
+
+				const [newConversation] = await db.insert(conversations).values({
+					id: validConversationId, // Use the provided ID
+					userId: session.user.id,
+					title: title
+				}).returning();
+
+				validConversationId = newConversation.id;
+			}
+		}
 
 		// Validate messages
 		if (!messages || !Array.isArray(messages)) {
@@ -330,115 +353,64 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		let savedUserMessageId: string | undefined;
 
 		if (userMessage.role === 'user') {
-			if (isEditing && editMessageId && parentId) {
-				// Handle message editing with forking
-				try {
-					console.log('🔧 [API] Attempting to edit message with forking:', editMessageId);
-					console.log('🔧 [API] Conversation ID (parentId):', parentId);
-					console.log('🔧 [API] Edit message ID:', editMessageId);
-					console.log('🔧 [API] New content:', userMessage.content);
-					
-					// First, get the original message to save it for forking
-					const originalMessage = await db.query.chats.findFirst({
-						where: and(
-							eq(chats.id, editMessageId),
-							eq(chats.userId, session.user.id)
-						)
-					});
-					
-					if (!originalMessage) {
-						console.error('🔧 [API] Original message not found:', editMessageId);
-						return new Response('Original message not found', { status: 404 });
-					}
-					
-					// Create a fork by saving the original message with a new ID
-					const forkId = `fork_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-					await db.insert(chats).values({
-						id: forkId,
-						userId: session.user.id,
-						parentId: originalMessage.parentId,
-						role: originalMessage.role,
-						content: originalMessage.content,
-						children: originalMessage.children,
-						createdAt: originalMessage.createdAt,
-						updatedAt: new Date()
-					});
-					
-					console.log('🔧 [API] Created fork with ID:', forkId);
-					
-					// Update the original message with new content
-					await db.update(chats)
-						.set({
-							content: userMessage.content,
-							updatedAt: new Date()
-						})
-						.where(and(
-							eq(chats.id, editMessageId),
-							eq(chats.userId, session.user.id)
-						));
-					
-					console.log('🔧 [API] Message updated in database');
-					
-					// Delete any assistant messages that came after this message
-					// This ensures we regenerate the response from the edited point
-					const editedMessage = await db.query.chats.findFirst({
-						where: and(
-							eq(chats.id, editMessageId),
-							eq(chats.userId, session.user.id)
-						)
-					});
-					
-					if (editedMessage) {
-						// For now, we'll let the frontend handle the conversation context
-						// and the AI will generate a response based on the edited message
-						// The forking system will handle the branching logic
-						console.log('🔧 [API] Message edit completed, ready for AI response generation');
-					}
-					
-					// Set conversation ID and message ID for response generation
-					conversationId = parentId;
-					savedUserMessageId = editMessageId;
-					
-					console.log('🔧 [API] Message edit with forking completed successfully');
-				} catch (error) {
-					console.error('🔧 [API] Error editing message:', error);
-					return new Response('Error editing message', { status: 500 });
-				}
-			} else {
-				// Normal message flow
-				conversationId = parentId || `conv_${Date.now()}`;
-				
-				// Use simple database storage for normal messages
-				const savedMessage = await db.insert(chats).values({
-					userId: session.user.id,
-					parentId: parentId || null,
-					role: 'user',
-					content: userMessage.content
-				}).returning();
-				
-				savedUserMessageId = savedMessage[0]?.id;
-				conversationId = parentId || savedUserMessageId;
-				console.log('🔧 [API] Message saved to database, ID:', savedUserMessageId);
-			}
+			// Insert user message and get the ID
+			const [savedMessage] = await db.insert(chats).values({
+				conversationId: validConversationId,
+				parentId: parentId || null, // null for new conversation, parent_id for forking
+				role: 'user',
+				content: userMessage.content,
+				version: 1
+			}).returning();
+			
+			savedUserMessageId = savedMessage.id;
 		}
 
+		// Check if session is still valid before starting stream
+		if (!session || !session.user) {
+			return new Response('Session expired', { status: 401 });
+		}
+		
 		// Create a ReadableStream for streaming the response
 		const stream = new ReadableStream({
 			async start(controller) {
+				let controllerClosed = false;
+				
+				const safeEnqueue = (data: Uint8Array) => {
+					if (!controllerClosed) {
+						try {
+							controller.enqueue(data);
+						} catch (e) {
+							console.error('Failed to enqueue data:', e);
+							controllerClosed = true;
+						}
+					}
+				};
+				
+				const safeClose = () => {
+					if (!controllerClosed) {
+						try {
+							controller.close();
+							controllerClosed = true;
+						} catch (e) {
+							console.error('Failed to close controller:', e);
+							controllerClosed = true;
+						}
+					}
+				};
+				
 				try {
-					// Prepare messages with system prompt
-					const enhancedMessages = [
-						{ role: 'system' as const, content: enhancedSystemPrompt },
-						...messages.map((msg: ChatMessage) => ({
-							role: msg.role,
-							content: msg.content
-						}))
+					// Build strict ancestor context for this conversation + latest user message
+					const ancestorMessages = await getAncestorMessages(validConversationId!, parentId ?? null, true);
+					const messagesForAI = [
+						...ancestorMessages.map((msg: any) => ({ role: msg.role, content: msg.content })),
+						{ role: 'user', content: userMessage.content }
 					];
-
+					console.log('POST context size:', messagesForAI.length);
+					
 					// Generate streaming response using Gemini
 					const result = await streamText({
 						model: google('gemini-2.0-flash'),
-						messages: enhancedMessages,
+						messages: messagesForAI,
 						temperature: 0.7,
 					});
 
@@ -446,48 +418,64 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 
 					// Stream the response chunks
 					for await (const chunk of result.textStream) {
+						if (controllerClosed) break;
+						
 						fullContent += chunk;
 						const encoder = new TextEncoder();
 						const data = encoder.encode(`data: ${JSON.stringify({ chunk })}\n\n`);
-						controller.enqueue(data);
+						safeEnqueue(data);
 					}
 
 					// Save assistant message to database after streaming completes
-					if (fullContent.trim() && savedUserMessageId && conversationId) {
+					if (fullContent.trim() && savedUserMessageId) {
 						try {
 							await db.insert(chats).values({
-								userId: session.user.id,
-								parentId: savedUserMessageId,
+								conversationId: validConversationId,
+								parentId: savedUserMessageId, // Link to the user message
 								role: 'assistant',
-								content: fullContent
+								content: fullContent,
+								version: 1
 							});
-							console.log('🔧 [API] Assistant message saved to database');
-						} catch (error) {
-							console.error('🔧 [API] Error saving assistant message:', error);
+						} catch (dbError) {
+							console.error('Failed to save assistant message:', dbError);
 						}
 					}
 
-					// Send context information if available
-					if (retrievedContext) {
-						const encoder = new TextEncoder();
-						const contextData = encoder.encode(`data: ${JSON.stringify({ context: retrievedContext })}\n\n`);
-						controller.enqueue(contextData);
-					}
-					
-					// Send conversation ID and end signal
+					// Send end signal
 					const encoder = new TextEncoder();
 					const conversationData = encoder.encode(`data: ${JSON.stringify({ conversationId })}\n\n`);
 					controller.enqueue(conversationData);
 					const endData = encoder.encode(`data: [DONE]\n\n`);
-					controller.enqueue(endData);
-					controller.close();
+					safeEnqueue(endData);
+					safeClose();
 
 				} catch (error) {
 					console.error('Streaming error:', error);
-					const encoder = new TextEncoder();
-					const errorData = encoder.encode(`data: ${JSON.stringify({ error: 'Streaming failed' })}\n\n`);
-					controller.enqueue(errorData);
-					controller.close();
+					
+					if (!controllerClosed) {
+						try {
+							const encoder = new TextEncoder();
+							let errorMessage = 'Streaming failed';
+							
+							// Provide more specific error messages
+							if (error instanceof Error) {
+								if (error.message.includes('Invalid state') || error.message.includes('Controller is already closed')) {
+									errorMessage = 'Connection interrupted';
+								} else if (error.message.includes('Unauthorized') || error.message.includes('session')) {
+									errorMessage = 'Session expired, please refresh the page';
+								} else {
+									errorMessage = error.message;
+								}
+							}
+							
+							const errorData = encoder.encode(`data: ${JSON.stringify({ error: errorMessage })}\n\n`);
+							safeEnqueue(errorData);
+						} catch (e) {
+							console.error('Failed to send error data:', e);
+						}
+					}
+					
+					safeClose();
 				}
 			}
 		});
@@ -507,8 +495,8 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 	}
 };
 
-// GET endpoint to fetch flat list of chat conversations
-export const GET: RequestHandler = async ({ cookies }) => {
+// GET endpoint to fetch chat history (all or by conversationId)
+export const GET: RequestHandler = async ({ url, cookies }) => {
 	try {
 		// Check authentication
 		const sessionToken = cookies.get('authjs.session-token');
@@ -532,56 +520,51 @@ export const GET: RequestHandler = async ({ cookies }) => {
 			return new Response('Unauthorized', { status: 401 });
 		}
 
-		// Get conversations using forking system
-		let conversations;
-		try {
-			conversations = await forkingAdapter.getUserConversations(session.user.id);
-		} catch (error) {
-			console.error('🔧 [API] Error getting conversations from forking system:', error);
-			// Fallback to simple database query
-			const userMessages = await db.query.chats.findMany({
-				where: eq(chats.userId, session.user.id),
+		// Check if conversationId is provided in query parameters
+		const conversationId = url.searchParams.get('conversationId');
+
+		if (conversationId) {
+			// Get messages for specific conversation
+			const conversationMessages = await db.query.chats.findMany({
+				where: eq(chats.conversationId, conversationId),
 				orderBy: chats.createdAt,
 			});
 
-			// Group messages by conversation (root messages and their descendants)
-			const conversationMap = new Map();
-			const processedIds = new Set();
+			console.log(`Retrieved ${conversationMessages.length} messages for conversation ${conversationId}`);
 
-			// Find all root messages (messages with no parent or parent is null)
-			const rootMessages = userMessages.filter(msg => !msg.parentId);
+			return new Response(JSON.stringify(conversationMessages), {
+				headers: {
+					'Content-Type': 'application/json',
+				},
+			});
+		} else {
+			// Fetch all conversations for the user
+			const userConversations = await db.query.conversations.findMany({
+				where: eq(conversations.userId, session.user.id),
+				orderBy: desc(conversations.updatedAt),
+			});
 
-			for (const rootMessage of rootMessages) {
-				if (processedIds.has(rootMessage.id)) continue;
+			// For each conversation, get the messages
+			const conversationsWithMessages = await Promise.all(
+				userConversations.map(async (conversation) => {
+					const messages = await db.query.chats.findMany({
+						where: eq(chats.conversationId, conversation.id),
+						orderBy: chats.createdAt,
+					});
+					
+					return {
+						...conversation,
+						messages
+					};
+				})
+			);
 
-				// Get all messages in this conversation (root + all descendants)
-				const conversationMessages = getAllDescendants(userMessages, rootMessage.id);
-				
-				// Mark all messages in this conversation as processed
-				conversationMessages.forEach(msg => processedIds.add(msg.id));
-
-				// Create conversation object
-				const conversation = {
-					id: rootMessage.id,
-					title: rootMessage.content.substring(0, 50) + (rootMessage.content.length > 50 ? '...' : ''),
-					content: rootMessage.content,
-					createdAt: rootMessage.createdAt,
-					updatedAt: getLatestMessageDate(conversationMessages),
-					messageCount: conversationMessages.length,
-					messages: conversationMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-				};
-
-				conversationMap.set(rootMessage.id, conversation);
-			}
-
-			conversations = Array.from(conversationMap.values()).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+			return new Response(JSON.stringify(conversationsWithMessages), {
+				headers: {
+					'Content-Type': 'application/json',
+				},
+			});
 		}
-
-		return new Response(JSON.stringify(conversations), {
-			headers: {
-				'Content-Type': 'application/json',
-			},
-		});
 
 	} catch (error) {
 		console.error('Chat history API error:', error);
@@ -589,44 +572,206 @@ export const GET: RequestHandler = async ({ cookies }) => {
 	}
 };
 
-// Helper function to get all descendants of a message
-function getAllDescendants(allMessages: any[], rootId: string): any[] {
-	const descendants: any[] = [];
-	const queue = [rootId];
-	const visited = new Set<string>();
+// PUT endpoint to edit a user message and create a new branch
+export const PUT: RequestHandler = async ({ request, cookies }) => {
+	try {
+		console.log('PUT /api/chat - Edit message request received');
+		
+		// Check authentication
+		const sessionToken = cookies.get('authjs.session-token');
+		console.log('Session token present:', !!sessionToken);
 
-	while (queue.length > 0) {
-		const currentId = queue.shift()!;
-		if (visited.has(currentId)) continue;
-		visited.add(currentId);
-
-		// Find the current message
-		const currentMessage = allMessages.find(msg => msg.id === currentId);
-		if (currentMessage) {
-			descendants.push(currentMessage);
+		if (!sessionToken) {
+			console.log('No session token found');
+			return new Response('Unauthorized', { status: 401 });
 		}
 
-		// Find all children of the current message
-		const children = allMessages.filter(msg => msg.parentId === currentId);
-		children.forEach(child => {
-			if (!visited.has(child.id)) {
-				queue.push(child.id);
+		// Check if session exists and is valid
+		const session = await db.query.sessions.findFirst({
+			where: and(
+				eq(sessions.sessionToken, sessionToken),
+				gt(sessions.expires, new Date())
+			),
+			with: {
+				user: true
 			}
 		});
+
+		console.log('Session found:', !!session, 'User found:', !!session?.user);
+
+		if (!session || !session.user) {
+			console.log('Invalid session or user');
+			return new Response('Unauthorized', { status: 401 });
+		}
+
+		const { messageId, newContent }: EditMessageRequest = await request.json();
+		console.log('Request payload:', { messageId, newContent: newContent?.substring(0, 50) + '...' });
+
+		// Validate request
+		if (!messageId || !newContent) {
+			console.log('Invalid request payload:', { messageId, newContent });
+			return new Response('Invalid request: messageId and newContent are required', { status: 400 });
+		}
+
+		// Find the message to edit
+		console.log('Looking for message to edit:', messageId);
+		const messageToEdit = await db.query.chats.findFirst({
+			where: and(
+				eq(chats.id, messageId),
+				eq(chats.role, 'user') // Only user messages can be edited
+			)
+		}) as Chat | undefined;
+
+		console.log('Message found:', !!messageToEdit, 'Message details:', messageToEdit ? { id: messageToEdit.id, content: messageToEdit.content.substring(0, 50) + '...' } : 'Not found');
+
+		if (!messageToEdit) {
+			console.error('Message not found for editing:', { messageId });
+			return new Response('Message not found or not editable', { status: 404 });
+		}
+
+		// Get strict ancestor context (root -> parent of the edited message) within the same conversation
+		console.log('Getting ancestor context for conversation', messageToEdit.conversationId, 'up to parent:', messageToEdit.parentId);
+		const ancestorMessages = await getAncestorMessages(messageToEdit.conversationId!, messageToEdit.parentId ?? null, true);
+		console.log('Ancestor messages found:', ancestorMessages.length, ancestorMessages.map(m => ({ id: m.id, role: m.role, snippet: (m.content || '').slice(0, 60) })));
+
+		// Create a new version of the message (this preserves the old version)
+		const newMessageId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString() + Math.random().toString(36).substr(2, 9);
+		console.log('Creating new message with ID:', newMessageId);
+		
+		try {
+			await db.insert(chats).values({
+				id: newMessageId,
+				conversationId: messageToEdit.conversationId!,
+				parentId: messageToEdit.parentId, // Same parent as original
+				role: 'user',
+				content: newContent,
+				isEdited: true,
+				version: (messageToEdit.version || 1) + 1
+			});
+			console.log('New message created successfully');
+		} catch (dbError) {
+			console.error('Database error creating new message:', dbError);
+			return new Response('Database error creating new message', { status: 500 });
+		}
+
+		// Create a ReadableStream for streaming the new response
+		const stream = new ReadableStream({
+			async start(controller) {
+				try {
+					// Prepare messages for AI (include the new edited message)
+					const messagesForAI = [
+						...ancestorMessages.map(msg => ({
+							role: msg.role,
+							content: msg.content
+						})),
+						{ role: 'user', content: newContent }
+					];
+
+					// Generate streaming response using Gemini
+					console.log('Calling Gemini API with messages:', messagesForAI.length);
+					console.log('First message:', messagesForAI[0]);
+					console.log('Last message:', messagesForAI[messagesForAI.length - 1]);
+					
+					const result = await streamText({
+						model: google('gemini-2.0-flash'),
+						messages: messagesForAI,
+						temperature: 0.7,
+					});
+					
+					console.log('Gemini API call successful, starting streaming');
+
+					let fullContent = '';
+
+					// Stream the response chunks
+					for await (const chunk of result.textStream) {
+						fullContent += chunk;
+						const encoder = new TextEncoder();
+						const data = encoder.encode(`data: ${JSON.stringify({ chunk })}\n\n`);
+						controller.enqueue(data);
+					}
+
+					// Save the new AI response as a child of the new message
+					if (fullContent.trim()) {
+						await db.insert(chats).values({
+							conversationId: messageToEdit.conversationId!,
+							parentId: newMessageId,
+							role: 'assistant',
+							content: fullContent,
+							version: 1
+						});
+					}
+
+					// Send end signal
+					const encoder = new TextEncoder();
+					const endData = encoder.encode(`data: [DONE]\n\n`);
+					controller.enqueue(endData);
+					controller.close();
+
+				} catch (error) {
+					console.error('Streaming error during edit:', error);
+					console.error('Streaming error details:', {
+						messageId: messageId,
+						newContent: newContent?.substring(0, 100),
+						errorMessage: error instanceof Error ? error.message : 'Unknown error',
+						errorStack: error instanceof Error ? error.stack : undefined
+					});
+					
+					const encoder = new TextEncoder();
+					const errorData = encoder.encode(`data: ${JSON.stringify({ error: 'Streaming failed during edit', details: error instanceof Error ? error.message : 'Unknown error' })}\n\n`);
+					controller.enqueue(errorData);
+					controller.close();
+				}
+			}
+		});
+
+		// Return streaming response
+		return new Response(stream, {
+			headers: {
+				'Content-Type': 'text/plain; charset=utf-8',
+				'Cache-Control': 'no-cache',
+				'Connection': 'keep-alive',
+			},
+		});
+
+	} catch (error) {
+		console.error('Edit message API error:', error);
+		console.error('Error details:', {
+			messageId: messageId || 'undefined',
+			newContent: newContent?.substring(0, 100) || 'undefined',
+			errorMessage: error instanceof Error ? error.message : 'Unknown error',
+			errorStack: error instanceof Error ? error.stack : undefined
+		});
+		return new Response('Internal server error', { status: 500 });
+	}
+};
+
+// Helper function to get all messages in a branch up to a specific message
+async function getAncestorMessages(conversationId: string, targetId: string | null, includeTarget: boolean = true): Promise<any[]> {
+	const messages: any[] = [];
+	if (!targetId) return messages;
+	const messageMap = new Map<string, any>();
+	
+	// Only load this conversation's messages
+	const allMessages = await db.query.chats.findMany({
+		where: eq(chats.conversationId, conversationId),
+		orderBy: chats.createdAt,
+	});
+
+	allMessages.forEach(msg => messageMap.set(msg.id, msg));
+
+	let currentMessage = messageMap.get(targetId);
+	while (currentMessage && currentMessage.parentId) {
+		if (includeTarget || currentMessage.id !== targetId) {
+			messages.unshift(currentMessage);
+		}
+		currentMessage = messageMap.get(currentMessage.parentId);
+	}
+	
+	if (currentMessage && (includeTarget || currentMessage.id !== targetId)) {
+		messages.unshift(currentMessage);
 	}
 
-	return descendants;
-}
-
-// Helper function to get the latest message date in a conversation
-function getLatestMessageDate(messages: any[]): string {
-	if (messages.length === 0) return new Date().toISOString();
-	
-	const latestMessage = messages.reduce((latest, current) => {
-		return new Date(current.createdAt) > new Date(latest.createdAt) ? current : latest;
-	});
-	
-	return latestMessage.createdAt;
+	return messages;
 }
 
 

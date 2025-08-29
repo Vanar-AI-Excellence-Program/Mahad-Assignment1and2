@@ -1,32 +1,44 @@
-import { json } from '@sveltejs/kit';
-import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
+import { config } from '$lib/config/env';
 
 export const GET: RequestHandler = async () => {
-  try {
-    const envCheck = {
-      AUTH_SECRET: !!env.AUTH_SECRET,
-      AUTH_URL: env.AUTH_URL,
-      DATABASE_URL: !!env.DATABASE_URL,
-      PUBLIC_APP_URL: env.PUBLIC_APP_URL,
-      GMAIL_USER: !!env.GMAIL_USER,
-      GMAIL_APP_PASSWORD: !!env.GMAIL_APP_PASSWORD,
-    };
+	try {
+		// Check environment variables
+		const envStatus = {
+			GEMINI_API_KEY: !!config.GEMINI_API_KEY,
+			DATABASE_URL: !!config.DATABASE_URL,
+			AUTH_SECRET: !!config.AUTH_SECRET,
+			NODE_ENV: config.NODE_ENV,
+			PUBLIC_APP_URL: config.PUBLIC_APP_URL
+		};
 
-    console.log('🔧 Environment check:', envCheck);
+		// Check if required variables are missing
+		const missingVars = Object.entries(envStatus)
+			.filter(([key, value]) => key !== 'NODE_ENV' && key !== 'PUBLIC_APP_URL' && !value)
+			.map(([key]) => key);
 
-    return json({
-      success: true,
-      environment: envCheck,
-      message: 'Environment variables check completed'
-    });
-    
-  } catch (error) {
-    console.error('❌ Environment check error:', error);
-    return json({ 
-      success: false, 
-      error: 'Environment check failed',
-      details: error 
-    }, { status: 500 });
-  }
+		return new Response(JSON.stringify({
+			status: missingVars.length === 0 ? 'ok' : 'missing_vars',
+			environment: envStatus,
+			missing: missingVars,
+			timestamp: new Date().toISOString()
+		}), {
+			headers: {
+				'Content-Type': 'application/json',
+			},
+		});
+
+	} catch (error) {
+		console.error('Environment check error:', error);
+		return new Response(JSON.stringify({
+			status: 'error',
+			error: error instanceof Error ? error.message : 'Unknown error',
+			timestamp: new Date().toISOString()
+		}), {
+			status: 500,
+			headers: {
+				'Content-Type': 'application/json',
+			},
+		});
+	}
 };
