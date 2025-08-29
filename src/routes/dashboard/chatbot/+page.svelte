@@ -230,7 +230,7 @@
 		// Create a hidden file input
 		const fileInput = document.createElement('input');
 		fileInput.type = 'file';
-		fileInput.accept = '.txt,.pdf';
+		fileInput.accept = '.txt,.pdf,.docx';
 		fileInput.style.display = 'none';
 		
 		fileInput.onchange = async (event) => {
@@ -239,12 +239,19 @@
 			
 			if (!file) return;
 			
-			// Validate file type
-			const allowedTypes = ['text/plain', 'application/pdf'];
-			if (!allowedTypes.includes(file.type)) {
-				uploadMessage = 'Only .txt and .pdf files are supported';
-				return;
-			}
+					// Validate file type
+		const allowedTypes = ['text/plain', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+		const allowedExtensions = ['.txt', '.pdf', '.docx'];
+		
+		const fileType = file.type.toLowerCase();
+		const fileName = file.name.toLowerCase();
+		const hasValidType = allowedTypes.includes(fileType);
+		const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
+		
+		if (!hasValidType && !hasValidExtension) {
+			uploadMessage = `Only .txt, .pdf, and .docx files are supported. Received: ${file.type} (${file.name})`;
+			return;
+		}
 			
 			// Validate file size (10MB limit)
 			const maxSize = 10 * 1024 * 1024; // 10MB
@@ -1469,7 +1476,7 @@
 						class="px-3 lg:px-4 py-3 lg:py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-2 border-green-400 hover:border-green-500 rounded-xl lg:rounded-2xl transition-all duration-200 flex items-center justify-center shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 active:scale-95"
 						disabled={isLoading || isEditing || isUploading}
 						aria-label="Upload file"
-						title="Upload documents for Q&A"
+						title="Upload documents (.txt, .pdf, .docx) for Q&A"
 					>
 						{#if isUploading}
 							<svg class="w-5 h-5 lg:w-6 lg:h-6 animate-spin" fill="none" viewBox="0 0 24 24">

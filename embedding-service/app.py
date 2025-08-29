@@ -7,7 +7,7 @@ import uvicorn
 import requests
 import json
 
-# Load environment variables
+# Load ennpm run db:studiovironment variables
 load_dotenv()
 
 app = FastAPI(title="Embedding Service", version="1.0.0")

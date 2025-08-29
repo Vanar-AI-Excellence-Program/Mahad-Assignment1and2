@@ -3,6 +3,8 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { documents, chunks } from '$lib/db/schema';
 import { config } from '$lib/config/env';
+import mammoth from 'mammoth';
+import { parsePDF } from '$lib/utils/pdf-parser.js';
 
 const EMBEDDING_API_URL = config.EMBEDDING_API_URL;
 const CHUNK_SIZE = 1000;
@@ -63,41 +65,157 @@ async function getEmbedding(text: string): Promise<{ embedding: number[], dim: n
   }
 }
 
-// Working PDF text extraction that avoids hardcoded path issues
+// Enhanced PDF text extraction using pdf-parse with dynamic import to avoid debug code issues
 async function extractTextFromPDF(file: File): Promise<string> {
   try {
-    // For now, return a working placeholder that explains the current status
-    // This avoids the hardcoded test file path issue completely
+    console.log(`📄 Processing PDF: ${file.name} (${file.size} bytes)`);
     
-    return `PDF Document: ${file.name}
-
-IMPORTANT: This PDF has been uploaded successfully and is ready for future processing.
-
-Current Status:
-- File stored in database: ✅
-- File size: ${file.size} bytes
-- File type: ${file.type}
-- Text extraction: ⚠️ Deferred (to avoid library conflicts)
-
-The system is working correctly and storing your PDFs. To enable full text extraction:
-1. Use text files (.txt) for immediate Q&A capability
-2. PDF parsing will be implemented with a different library
-3. Your documents are safely stored and organized
-
-You can now ask questions about any text documents you upload!`;
+    // Validate file is actually a PDF
+    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+      throw new Error(`File ${file.name} is not a valid PDF file`);
+    }
     
-  } catch (error) {
-    console.error('PDF processing error:', error);
+    // Convert File to Buffer for pdf-parse with validation
+    const arrayBuffer = await file.arrayBuffer();
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      throw new Error(`File ${file.name} appears to be empty or corrupted`);
+    }
     
-    // Return a fallback message
-    return `PDF Document: ${file.name}
+    const buffer = Buffer.from(arrayBuffer);
+    console.log(`📄 Buffer created successfully: ${buffer.length} bytes`);
+    
+    // Extract text using our safe PDF parser wrapper
+    let data;
+    try {
+      // Use the safe PDF parser wrapper
+      data = await parsePDF(buffer);
+    } catch (parseError) {
+      console.error(`PDF parsing failed for ${file.name}:`, parseError);
+      throw new Error(`PDF parsing failed: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+    }
+    
+    if (!data) {
+      throw new Error('PDF parsing returned no data');
+    }
+    
+    if (!data.text || data.text.trim().length === 0) {
+      console.warn(`⚠️ PDF ${file.name} contains no extractable text`);
+      return `PDF Document: ${file.name}
 
 This PDF file has been uploaded successfully.
-The file will be stored for future processing.
 
-Error details: ${error instanceof Error ? error.message : 'Unknown error'}
+Note: No text content could be extracted from this PDF. This may be due to:
+- The PDF contains only images or scanned content
+- The PDF is password-protected
+- The PDF uses non-standard text encoding
+- The PDF has security restrictions
 
-The system is working correctly and your document is stored safely.`;
+The file is safely stored in the system. You can:
+1. Try uploading a different PDF file
+2. Use text files (.txt) for immediate Q&A capability
+3. Convert the PDF to text format before uploading
+
+You can still ask questions about other uploaded documents.`;
+    }
+    
+    console.log(`✅ PDF ${file.name} processed successfully: ${data.text.length} characters extracted from ${data.numpages || 'unknown'} pages`);
+    
+    // Return the extracted text with comprehensive metadata
+    return `PDF Document: ${file.name}
+
+${data.text}
+
+---
+Document Information:
+- Pages: ${data.numpages || 'Unknown'}
+- Text Length: ${data.text.length} characters
+- File Size: ${file.size} bytes
+- Processing: Successfully extracted and ready for Q&A
+- Extraction Method: pdf-parse library (dynamically imported)`;
+    
+  } catch (error) {
+    console.error(`❌ PDF processing error for ${file.name}:`, error);
+    
+    // Enhanced error handling with specific error types
+    let errorMessage = 'Unknown error occurred during PDF processing';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      
+      // Handle specific error types
+      if (error.message.includes('ENOENT')) {
+        errorMessage = 'File access error - the uploaded file could not be processed';
+      } else if (error.message.includes('Invalid PDF')) {
+        errorMessage = 'The uploaded file does not apply to be a valid PDF';
+      } else if (error.message.includes('password')) {
+        errorMessage = 'The PDF appears to be password-protected';
+      }
+    }
+    
+    // Return a detailed error message but don't fail the upload
+    return `PDF Document: ${file.name}
+
+This PDF file has been uploaded successfully, but text extraction encountered an issue.
+
+Error Details: ${errorMessage}
+
+The file is safely stored in the system. For immediate assistance, you can:
+1. Try uploading the same file again (sometimes temporary issues resolve)
+2. Convert the PDF to a text file (.txt) and upload that instead
+3. Try uploading a different PDF file
+4. Use the chat without documents for general questions
+
+Your document upload was successful, and you can ask questions about other uploaded documents.`;
+  }
+}
+
+// Helper function to extract text from various document formats
+async function extractTextFromDocument(file: File): Promise<string> {
+  const fileType = file.type.toLowerCase();
+  const fileName = file.name.toLowerCase();
+  
+  try {
+    if (fileType === 'text/plain' || fileName.endsWith('.txt')) {
+      // Handle text files
+      const textContent = await file.text();
+      console.log(`📝 Text file processed: ${file.name}, ${textContent.length} characters`);
+      return textContent;
+      
+    } else if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
+      // Handle PDF files
+      return await extractTextFromPDF(file);
+      
+    } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+               fileName.endsWith('.docx')) {
+      // Handle DOCX files using mammoth
+      console.log(`📄 Processing DOCX: ${file.name}`);
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      
+      const result = await mammoth.extractRawText({ buffer });
+      
+      if (result.value && result.value.trim().length > 0) {
+        console.log(`✅ DOCX ${file.name} processed successfully: ${result.value.length} characters extracted`);
+        return `DOCX Document: ${file.name}
+
+${result.value}
+
+---
+Document Information:
+- Text Length: ${result.value.length} characters
+- File Size: ${file.size} bytes
+- Processing: Successfully extracted and ready for Q&A`;
+      } else {
+        console.warn(`⚠️ DOCX ${file.name} contains no extractable text`);
+        return `DOCX Document: ${file.name}\n\nThis DOCX file has been uploaded successfully.\n\nNote: No text content could be extracted from this document.`;
+      }
+      
+    } else {
+      throw new Error(`Unsupported file type: ${fileType} (${fileName})`);
+    }
+    
+  } catch (error) {
+    console.error(`❌ Document processing error for ${file.name}:`, error);
+    throw new Error(`Failed to process ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -109,7 +227,15 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       return json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const formData = await request.formData();
+    // Parse form data with error handling
+    let formData: FormData;
+    try {
+      formData = await request.formData();
+    } catch (error) {
+      console.error('Failed to parse form data:', error);
+      return json({ error: 'Invalid request format' }, { status: 400 });
+    }
+
     const file = formData.get('file') as File;
     const conversationId = formData.get('conversationId') as string;
     
@@ -121,10 +247,32 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       return json({ error: 'No conversation ID provided' }, { status: 400 });
     }
 
-    // Validate file type
-    const allowedTypes = ['text/plain', 'application/pdf'];
-    if (!allowedTypes.includes(file.type)) {
-      return json({ error: 'Only .txt and .pdf files are supported' }, { status: 400 });
+    // Validate that file is actually a File object and not a string
+    if (typeof file === 'string' || !file.name || !file.size) {
+      return json({ error: 'Invalid file format received' }, { status: 400 });
+    }
+
+    console.log(`📁 Processing upload: ${file.name} (${file.type}, ${file.size} bytes) for conversation: ${conversationId}`);
+
+    // Enhanced file type validation
+    const allowedTypes = [
+      'text/plain',
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    const allowedExtensions = ['.txt', '.pdf', '.docx'];
+    
+    const fileType = file.type.toLowerCase();
+    const fileName = file.name.toLowerCase();
+    const hasValidType = allowedTypes.includes(fileType);
+    const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
+    
+    if (!hasValidType && !hasValidExtension) {
+      return json({ 
+        error: 'Unsupported file type. Please upload .txt, .pdf, or .docx files only.',
+        receivedType: fileType,
+        receivedName: file.name
+      }, { status: 400 });
     }
 
     // Validate file size (10MB limit)
@@ -133,21 +281,25 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       return json({ error: 'File size must be less than 10MB' }, { status: 400 });
     }
 
+    // Extract text using the enhanced document processor with error handling
     let textContent: string;
-
-    // Extract text based on file type
-    if (file.type === 'text/plain') {
-      textContent = await file.text();
-      console.log(`Text file processed: ${file.name}, ${textContent.length} characters`);
-    } else if (file.type === 'application/pdf') {
-      textContent = await extractTextFromPDF(file);
-      console.log(`PDF file processed: ${file.name}, ${textContent.length} characters`);
-    } else {
-      return json({ error: 'Unsupported file type' }, { status: 400 });
+    try {
+      textContent = await extractTextFromDocument(file);
+    } catch (error) {
+      console.error(`Failed to extract text from ${file.name}:`, error);
+      return json({ 
+        error: `Failed to process file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        file: file.name,
+        type: file.type
+      }, { status: 400 });
     }
 
-    if (!textContent.trim()) {
-      return json({ error: 'File contains no text content' }, { status: 400 });
+    if (!textContent || !textContent.trim()) {
+      return json({ 
+        error: 'File contains no text content',
+        file: file.name,
+        type: file.type
+      }, { status: 400 });
     }
 
     // Insert document record with conversation_id
@@ -198,6 +350,8 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
         chunks: chunkData.length,
         size_bytes: documentRecord.size_bytes,
         conversation_id: conversationId,
+        file_type: file.type,
+        text_length: textContent.length,
       },
     });
 
