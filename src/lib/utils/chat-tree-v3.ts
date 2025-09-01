@@ -371,3 +371,138 @@ export function goToNextVersion(chatTree: ChatTree, messageId: string): string |
   const currentIndex = navInfo.allVersions.findIndex(node => node.id === messageId);
   return navInfo.allVersions[currentIndex + 1]?.id || null;
 }
+
+/**
+ * Get all regenerated versions of an AI response
+ */
+export function getAIRegenerationVersions(chatTree: ChatTree, originalMessageId: string): ChatTreeNode[] {
+  const originalMessage = chatTree[originalMessageId];
+  if (!originalMessage || originalMessage.role !== 'assistant') return [];
+
+  // Find all assistant messages that have the same parent (same user message)
+  const regeneratedVersions = Object.values(chatTree).filter(node =>
+    node.role === 'assistant' &&
+    node.parentId === originalMessage.parentId &&
+    node.conversationId === originalMessage.conversationId
+  );
+
+  // Sort by creation time so original is first
+  regeneratedVersions.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  return regeneratedVersions;
+}
+
+/**
+ * Get navigation info for AI response regeneration versions
+ */
+export function getAIRegenerationInfo(chatTree: ChatTree, messageId: string): {
+  hasRegenerations: boolean;
+  currentVersion: number;
+  totalVersions: number;
+  canGoToPrevious: boolean;
+  canGoToNext: boolean;
+  allVersions: ChatTreeNode[];
+  originalMessageId: string | null;
+} {
+  const message = chatTree[messageId];
+  if (!message || message.role !== 'assistant') {
+    return {
+      hasRegenerations: false,
+      currentVersion: 1,
+      totalVersions: 1,
+      canGoToPrevious: false,
+      canGoToNext: false,
+      allVersions: [],
+      originalMessageId: null
+    };
+  }
+
+  const allVersions = getAIRegenerationVersions(chatTree, messageId);
+  if (allVersions.length <= 1) {
+    return {
+      hasRegenerations: false,
+      currentVersion: 1,
+      totalVersions: 1,
+      canGoToPrevious: false,
+      canGoToNext: false,
+      allVersions: [],
+      originalMessageId: messageId
+    };
+  }
+
+  // Find the original message (first one created)
+  const originalMessageId = allVersions[0].id;
+  const currentIndex = allVersions.findIndex(node => node.id === messageId);
+
+  return {
+    hasRegenerations: allVersions.length > 1,
+    currentVersion: currentIndex + 1,
+    totalVersions: allVersions.length,
+    canGoToPrevious: currentIndex > 0,
+    canGoToNext: currentIndex < allVersions.length - 1,
+    allVersions,
+    originalMessageId
+  };
+}
+
+/**
+ * Navigate to previous regeneration version
+ */
+export function goToPreviousRegeneration(chatTree: ChatTree, messageId: string): string | null {
+  const regenInfo = getAIRegenerationInfo(chatTree, messageId);
+  if (!regenInfo.canGoToPrevious) return null;
+
+  const currentIndex = regenInfo.allVersions.findIndex(node => node.id === messageId);
+  return regenInfo.allVersions[currentIndex - 1]?.id || null;
+}
+
+/**
+ * Navigate to next regeneration version
+ */
+export function goToNextRegeneration(chatTree: ChatTree, messageId: string): string | null {
+  const regenInfo = getAIRegenerationInfo(chatTree, messageId);
+  if (!regenInfo.canGoToNext) return null;
+
+  const currentIndex = regenInfo.allVersions.findIndex(node => node.id === messageId);
+  return regenInfo.allVersions[currentIndex + 1]?.id || null;
+}
+
+/**
+ * Create a regenerated AI response (adds as sibling to original)
+ */
+export function createRegeneratedAIResponse(
+  chatTree: ChatTree,
+  originalMessageId: string,
+  newContent: string,
+  conversationId: string
+): { newTree: ChatTree; newNodeId: string } {
+  const originalMessage = chatTree[originalMessageId];
+  if (!originalMessage || originalMessage.role !== 'assistant') {
+    throw new Error('Original message not found or is not an assistant message');
+  }
+
+  // Create new regenerated AI message with same parent as original
+  const newMessageId = crypto.randomUUID();
+  const newMessage: ChatTreeNode = {
+    id: newMessageId,
+    parentId: originalMessage.parentId, // Same parent as original
+    conversationId: conversationId,
+    role: 'assistant',
+    content: newContent,
+    isEdited: false,
+    version: 1, // Each regeneration is version 1 of its own branch
+    createdAt: new Date().toISOString(),
+    children: []
+  };
+
+  // Create new tree with the regenerated message
+  const newTree = { ...chatTree };
+  newTree[newMessageId] = newMessage;
+
+  // Add new message as child of the same parent (sibling to original)
+  if (originalMessage.parentId && newTree[originalMessage.parentId]) {
+    newTree[originalMessage.parentId].children.push(newMessageId);
+  }
+
+  return { newTree, newNodeId: newMessageId };
+}

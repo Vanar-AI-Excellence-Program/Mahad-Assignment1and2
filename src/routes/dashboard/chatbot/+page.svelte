@@ -14,6 +14,9 @@
 		getVersionNavigationInfo,
 		goToPreviousVersion,
 		goToNextVersion,
+		getAIRegenerationInfo as getAIRegenerationInfoUtil,
+		goToPreviousRegeneration,
+		goToNextRegeneration,
 		type ChatTree,
 		type ChatTreeNode,
 		type ConversationState
@@ -673,6 +676,129 @@
 		return versionInfo;
 	}
 
+	// Regeneration functions
+	async function regenerateAIResponse(messageId: string) {
+		console.log('Regenerating AI response for message:', messageId);
+		
+		try {
+			isLoading = true;
+			
+			// Call the regeneration API
+			const response = await fetch('/api/chat', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ messageId })
+			});
+
+			if (response.ok) {
+				// Handle streaming response from regeneration API
+				const reader = response.body?.getReader();
+				const decoder = new TextDecoder();
+				let accumulatedResponse = '';
+					
+				if (reader) {
+					try {
+						while (true) {
+							const { done, value } = await reader.read();
+							if (done) break;
+							
+							const chunk = decoder.decode(value);
+							const lines = chunk.split('\n');
+							
+							for (const line of lines) {
+								if (line.startsWith('data: ')) {
+									const data = line.slice(6);
+									if (data === '[DONE]') {
+										// Regeneration complete, reload chat history
+										console.log('Regeneration streaming complete, reloading chat history...');
+										await loadChatHistory();
+										
+										// Navigate to the new regenerated response
+										const regeneratedMessage = Object.values(currentChatTree).find(node =>
+											node.role === 'assistant' &&
+											node.parentId === currentChatTree[messageId]?.parentId &&
+											node.id !== messageId
+										);
+
+										if (regeneratedMessage) {
+											currentNodeId = regeneratedMessage.id;
+											console.log('Navigated to regenerated AI response:', regeneratedMessage.id);
+											saveUIState();
+										}
+										break;
+									} else {
+										try {
+											const parsed = JSON.parse(data);
+											if (parsed.chunk) {
+												accumulatedResponse += parsed.chunk;
+												console.log('Received regeneration chunk:', parsed.chunk);
+											} else if (parsed.type === 'sources' && parsed.sources) {
+												// Store source information for the regenerated message
+												messageSources[messageId] = parsed.sources;
+												console.log('Sources received for regenerated message:', parsed.sources);
+											}
+										} catch (e) {
+											console.log('Failed to parse regeneration chunk data:', data, e);
+										}
+									}
+								}
+							}
+						}
+					} finally {
+						reader.releaseLock();
+					}
+				} else {
+					// Fallback: reload chat history if streaming fails
+					console.log('No reader available, falling back to direct reload');
+					await loadChatHistory();
+				}
+			} else {
+				const error = await response.text();
+				console.error('Failed to regenerate message:', error);
+				alert('Failed to regenerate message. Please try again.');
+			}
+		} catch (error) {
+			console.error('Error regenerating message:', error);
+			alert('Error regenerating message. Please try again.');
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	function navigateToPreviousRegeneration(messageId: string) {
+		console.log('Attempting to navigate to previous regeneration of:', messageId);
+		const previousRegenerationId = goToPreviousRegeneration(currentChatTree, messageId);
+		console.log('Previous regeneration ID:', previousRegenerationId);
+		if (previousRegenerationId) {
+			currentNodeId = previousRegenerationId;
+			console.log('Successfully navigated to previous regeneration:', currentNodeId);
+			// Trigger reactive update
+			currentNodeId = currentNodeId;
+		} else {
+			console.log('No previous regeneration available for message:', messageId);
+		}
+	}
+
+	function navigateToNextRegeneration(messageId: string) {
+		console.log('Attempting to navigate to next regeneration of:', messageId);
+		const nextRegenerationId = goToNextRegeneration(currentChatTree, messageId);
+		console.log('Next regeneration ID:', nextRegenerationId);
+		if (nextRegenerationId) {
+			currentNodeId = nextRegenerationId;
+			console.log('Successfully navigated to next regeneration:', currentNodeId);
+			// Trigger reactive update
+			currentNodeId = currentNodeId;
+		} else {
+			console.log('No next regeneration available for message:', messageId);
+		}
+	}
+
+	function getAIRegenerationInfo(messageId: string) {
+		const regenInfo = getAIRegenerationInfoUtil(currentChatTree, messageId);
+		console.log('Regeneration info for message', messageId, ':', regenInfo);
+		return regenInfo;
+	}
+
 	// Load chat history on mount
 	onMount(() => {
 		loadUIState();
@@ -1165,18 +1291,70 @@
 											isError={false}
 											sources={messageSources[message.id] || []}
 										/>
-										<!-- Copy button for AI response — safe isolated scope -->
-										<button
-											on:click={copyAIResponse}
-											class="copy-button"
-											aria-label="Copy AI response"
-											title="Copy this AI response to clipboard"
-										>
-											<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-											</svg>
-											Copy
-										</button>
+										
+										<!-- Regeneration controls and copy button -->
+										<div class="mt-2 lg:mt-3 pt-2 lg:pt-3 border-t border-gray-200 flex items-center justify-between">
+											<div class="flex items-center space-x-2">
+												<!-- Regenerate button -->
+												<button
+													on:click={() => regenerateAIResponse(message.id)}
+													disabled={isLoading}
+													class="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center space-x-1 hover:bg-blue-50 px-2 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+													title="Regenerate this AI response"
+													aria-label="Regenerate AI response"
+												>
+													<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+													</svg>
+													<span>Regenerate</span>
+												</button>
+												
+												<!-- Regeneration navigation -->
+												{#if getAIRegenerationInfo(message.id).hasRegenerations}
+													{@const regenInfo = getAIRegenerationInfo(message.id)}
+													<div class="flex items-center space-x-2 ml-3 px-2 py-1 bg-blue-50 rounded-lg border border-blue-200">
+														<button
+															on:click={() => navigateToPreviousRegeneration(message.id)}
+															disabled={!regenInfo.canGoToPrevious}
+															class="text-xs text-blue-600 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed font-medium flex items-center space-x-1 hover:bg-blue-100 px-1.5 py-1 rounded transition-colors"
+															title="Previous regeneration"
+															aria-label="Go to previous regeneration of this response"
+														>
+															<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+															</svg>
+														</button>
+														<span class="text-xs text-blue-600 font-semibold px-2 bg-blue-100 rounded border border-blue-200">
+															{regenInfo.currentVersion} / {regenInfo.totalVersions}
+														</span>
+														<button
+															on:click={() => navigateToNextRegeneration(message.id)}
+															disabled={!regenInfo.canGoToNext}
+															class="text-xs text-blue-600 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed font-medium flex items-center space-x-1 hover:bg-blue-100 px-1.5 py-1 rounded transition-colors"
+															title="Next regeneration"
+															aria-label="Go to next regeneration of this response"
+														>
+															<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+															</svg>
+														</button>
+													</div>
+												{/if}
+											</div>
+											
+											<!-- Copy button -->
+											<button
+												on:click={copyAIResponse}
+												class="copy-button"
+												aria-label="Copy AI response"
+												title="Copy this AI response to clipboard"
+											>
+												<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+												</svg>
+												Copy
+											</button>
+										</div>
 									</div>
 								{/if}
 							</div>
@@ -1231,6 +1409,7 @@
 											<!-- Typing cursor for active streaming -->
 											<span class="inline-block w-0.5 h-4 bg-blue-500 ml-1 animate-pulse"></span>
 										</div>
+										
 										<!-- Copy button for streaming AI response — safe isolated scope -->
 										<button
 											on:click={copyAIResponse}
