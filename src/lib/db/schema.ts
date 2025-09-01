@@ -65,6 +65,43 @@ export const chats = pgTable('chats', {
   version: integer('version').default(1),
 });
 
+// RAG System Tables
+// Documents table - stores uploaded documents
+export const documents = pgTable('documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),
+  filename: text('filename').notNull(),
+  originalContent: text('original_content').notNull(),
+  fileType: varchar('file_type', { length: 50 }).notNull().default('text/plain'),
+  fileSize: integer('file_size'),
+  status: varchar('status', { length: 20 }).notNull().default('processing'), // processing, completed, failed
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Chunks table - stores text chunks from documents
+export const chunks = pgTable('chunks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  documentId: uuid('document_id').notNull().references(() => documents.id, { onDelete: 'cascade' }),
+  content: text('content').notNull(),
+  chunkIndex: integer('chunk_index').notNull(),
+  startChar: integer('start_char'),
+  endChar: integer('end_char'),
+  metadata: text('metadata'), // JSON string for additional metadata
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Embeddings table - stores vector embeddings for chunks
+export const embeddings = pgTable('embeddings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  chunkId: uuid('chunk_id').notNull().references(() => chunks.id, { onDelete: 'cascade' }),
+  embedding: text('embedding').notNull(), // Vector as JSON string
+  model: varchar('model', { length: 100 }).notNull().default('text-embedding-004'),
+  dimensions: integer('dimensions').notNull().default(1536),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ one, many }) => ({
   profile: one(userProfiles, {
@@ -73,6 +110,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   sessions: many(sessions),
   conversations: many(conversations),
+  documents: many(documents),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -95,6 +133,7 @@ export const conversationsRelations = relations(conversations, ({ one, many }) =
     references: [users.id],
   }),
   chats: many(chats),
+  documents: many(documents),
 }));
 
 export const chatsRelations = relations(chats, ({ one, many }) => ({
@@ -112,6 +151,34 @@ export const chatsRelations = relations(chats, ({ one, many }) => ({
   }),
 }));
 
+// RAG Relations
+export const documentsRelations = relations(documents, ({ one, many }) => ({
+  user: one(users, {
+    fields: [documents.userId],
+    references: [users.id],
+  }),
+  conversation: one(conversations, {
+    fields: [documents.conversationId],
+    references: [conversations.id],
+  }),
+  chunks: many(chunks),
+}));
+
+export const chunksRelations = relations(chunks, ({ one, many }) => ({
+  document: one(documents, {
+    fields: [chunks.documentId],
+    references: [documents.id],
+  }),
+  embeddings: many(embeddings),
+}));
+
+export const embeddingsRelations = relations(embeddings, ({ one }) => ({
+  chunk: one(chunks, {
+    fields: [embeddings.chunkId],
+    references: [chunks.id],
+  }),
+}));
+
 // Types for TypeScript
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -125,3 +192,9 @@ export type Conversation = typeof conversations.$inferSelect;
 export type NewConversation = typeof conversations.$inferInsert;
 export type Chat = typeof chats.$inferSelect;
 export type NewChat = typeof chats.$inferInsert;
+export type Document = typeof documents.$inferSelect;
+export type NewDocument = typeof documents.$inferInsert;
+export type Chunk = typeof chunks.$inferSelect;
+export type NewChunk = typeof chunks.$inferInsert;
+export type Embedding = typeof embeddings.$inferSelect;
+export type NewEmbedding = typeof embeddings.$inferInsert;

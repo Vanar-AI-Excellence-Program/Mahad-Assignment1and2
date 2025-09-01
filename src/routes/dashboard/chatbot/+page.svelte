@@ -36,6 +36,11 @@
 	let editingContent = '';
 	let autoScrollRequested = false;
 	
+	// Upload state
+	let isUploading = false;
+	let uploadMessage = '';
+	let selectedFile: File | null = null;
+	
 	// Temporary state for immediate UI updates
 	let pendingUserMessage: string | null = null;
 	let streamingAIResponse = '';
@@ -243,7 +248,7 @@
 		editingMessageId = null;
 		editingContent = '';
 	}
-
+			
 	// Save edited message
 	async function saveEditedMessage(message: any) {
 		console.log('saveEditedMessage called with message:', message);
@@ -680,6 +685,60 @@
 		saveUIState();
 		stopWordStreaming(); // Clean up any active streaming
 	});
+
+	// File upload handler
+	async function handleFileUpload() {
+		const fileInput = document.createElement('input');
+		fileInput.type = 'file';
+		fileInput.accept = '.txt,.pdf';
+		fileInput.onchange = async (event) => {
+			const target = event.target as HTMLInputElement;
+			const file = target.files?.[0];
+			
+			if (file) {
+				selectedFile = file;
+				await uploadFile(file);
+			}
+		};
+		fileInput.click();
+	}
+
+	async function uploadFile(file: File) {
+		try {
+			isUploading = true;
+			uploadMessage = '📤 Uploading document...';
+
+			const formData = new FormData();
+			formData.append('file', file);
+			if (currentConversationId) {
+				formData.append('conversationId', currentConversationId);
+			}
+
+			const response = await fetch('/api/upload', {
+				method: 'POST',
+				body: formData
+			});
+
+			if (response.ok) {
+				const result = await response.json();
+				uploadMessage = `✅ Document uploaded successfully! Created ${result.chunks} chunks.`;
+				
+				// Clear the message after 5 seconds
+				setTimeout(() => {
+					uploadMessage = '';
+				}, 5000);
+			} else {
+				const error = await response.json();
+				uploadMessage = `❌ Upload failed: ${error.error || 'Unknown error'}`;
+			}
+		} catch (error) {
+			console.error('Upload error:', error);
+			uploadMessage = '❌ Upload failed: Network error';
+		} finally {
+			isUploading = false;
+			selectedFile = null;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -893,15 +952,15 @@
 									
 									{#if editingMessageId === message.id}
 										<!-- Edit Mode -->
-										<div class="space-y-3">
-											<textarea
-												bind:value={editingContent}
+											<div class="space-y-3">
+												<textarea
+													bind:value={editingContent}
 												class="w-full px-3 py-2 text-gray-800 rounded-lg border-2 border-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none"
-												rows="3"
-												placeholder="Edit your message..."
-											></textarea>
-											<div class="flex space-x-2">
-												<button
+													rows="3"
+													placeholder="Edit your message..."
+												></textarea>
+												<div class="flex space-x-2">
+													<button
 													on:click={() => saveEditedMessage(message)}
 													disabled={isLoading}
 													class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded-lg transition-colors disabled:opacity-50"
@@ -913,14 +972,14 @@
 														</svg>
 													{/if}
 													Save
-												</button>
-												<button
-													on:click={cancelEditing}
+													</button>
+													<button
+														on:click={cancelEditing}
 													disabled={isLoading}
 													class="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-lg transition-colors disabled:opacity-50"
-												>
+													>
 													Cancel
-												</button>
+													</button>
 											</div>
 										</div>
 									{:else}
@@ -1076,14 +1135,41 @@
 
 			<!-- Chat Input -->
 			<div class="bg-white rounded-b-xl lg:rounded-br-xl shadow-sm border-t-2 border-gray-100 p-3 lg:p-6 flex-shrink-0">
+				<!-- Upload Status Message -->
+				{#if uploadMessage}
+					<div class="mb-3 p-3 rounded-lg text-sm {uploadMessage.startsWith('✅') ? 'bg-green-100 text-green-800 border border-green-200' : uploadMessage.startsWith('❌') ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-blue-100 text-blue-800 border border-blue-200'}">
+						{uploadMessage}
+					</div>
+				{/if}
+				
 				<form on:submit={handleChatSubmit} class="flex space-x-2 lg:space-x-4">
+					<!-- Upload Button -->
+					<button
+						type="button"
+						on:click={handleFileUpload}
+						class="px-3 lg:px-4 py-3 lg:py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-2 border-green-400 hover:border-green-500 rounded-xl lg:rounded-2xl transition-all duration-200 flex items-center justify-center shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 active:scale-95"
+						disabled={isLoading || isUploading}
+						aria-label="Upload file"
+						title="Upload documents for Q&A"
+					>
+						{#if isUploading}
+							<svg class="w-5 h-5 lg:w-6 lg:h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+							</svg>
+						{:else}
+							<svg class="w-5 h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+							</svg>
+						{/if}
+					</button>
 					<div class="flex-1 relative">
 						<input
 							bind:value={input}
 							type="text"
 							placeholder="Ask me anything... I'm here to help!"
 							class="w-full px-3 lg:px-6 py-3 lg:py-4 text-base lg:text-lg border-2 border-gray-200 rounded-xl lg:rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all duration-200 resize-none hover:border-gray-300 focus:shadow-md"
-							disabled={isLoading}
+							disabled={isLoading || isUploading}
 						/>
 						{#if input.trim()}
 							<button
@@ -1100,7 +1186,7 @@
 					</div>
 					<button
 						type="submit"
-						disabled={!input.trim() || isLoading}
+						disabled={!input.trim() || isLoading || isUploading}
 						class="px-4 lg:px-8 py-3 lg:py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl lg:rounded-2xl font-semibold hover:from-blue-700 hover:to-purple-700 focus:ring-4 focus:ring-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center space-x-2 lg:space-x-3 shadow-lg hover:shadow-xl text-sm lg:text-base transform hover:scale-105 active:scale-95"
 					>
 						{#if isLoading}
@@ -1121,3 +1207,4 @@
 		</div>
 	</div>
 </div>
+

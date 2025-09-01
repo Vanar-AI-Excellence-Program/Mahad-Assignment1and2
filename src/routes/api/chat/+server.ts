@@ -2,9 +2,15 @@ import { google } from '@ai-sdk/google';
 import { streamText } from 'ai';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { sessions, chats, conversations, type Chat, type Conversation } from '$lib/db/schema';
+import { sessions, chats, conversations, documents, chunks, embeddings, type Chat, type Conversation } from '$lib/db/schema';
 import { eq, and, gt, desc, inArray } from 'drizzle-orm';
 import { config } from '$lib/config/env';
+
+import { EMBEDDING_API_URL } from '$lib/config/env';
+
+// Use hardcoded URL for testing
+const embeddingApiUrl = 'http://localhost:8000';
+console.log('Chat API - Using embedding API URL:', embeddingApiUrl);
 
 interface ChatMessage {
 	id?: string;
@@ -15,6 +21,112 @@ interface ChatMessage {
 interface EditMessageRequest {
 	messageId: string;
 	newContent: string;
+}
+
+// Helper function to generate embedding for query
+async function generateQueryEmbedding(query: string): Promise<number[]> {
+    try {
+        const response = await fetch(`${embeddingApiUrl}/embed`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                text: query,
+                model: 'text-embedding-004'
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Embedding API error: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        return result.embedding;
+    } catch (error) {
+        console.error('Error generating query embedding:', error);
+        return [];
+    }
+}
+
+// Helper function to calculate cosine similarity
+function cosineSimilarity(vecA: number[], vecB: number[]): number {
+    if (vecA.length !== vecB.length) {
+        return 0;
+    }
+
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+
+    for (let i = 0; i < vecA.length; i++) {
+        dotProduct += vecA[i] * vecB[i];
+        normA += vecA[i] * vecA[i];
+        normB += vecB[i] * vecB[i];
+    }
+
+    normA = Math.sqrt(normA);
+    normB = Math.sqrt(normB);
+
+    if (normA === 0 || normB === 0) {
+        return 0;
+    }
+
+    return dotProduct / (normA * normB);
+}
+
+// Helper function to retrieve relevant document chunks
+async function retrieveRelevantChunks(query: string, conversationId: string, userId: string, limit: number = 3): Promise<string[]> {
+    try {
+        // Generate embedding for the query
+        const queryEmbedding = await generateQueryEmbedding(query);
+        if (queryEmbedding.length === 0) {
+            return [];
+        }
+
+        // Get all embeddings for the user's documents in this conversation
+        const allEmbeddings = await db.select({
+            embedding: embeddings.embedding,
+            chunkContent: chunks.content,
+            documentFilename: documents.filename
+        })
+        .from(embeddings)
+        .innerJoin(chunks, eq(embeddings.chunkId, chunks.id))
+        .innerJoin(documents, eq(chunks.documentId, documents.id))
+        .where(and(
+            eq(documents.userId, userId),
+            eq(documents.conversationId, conversationId)
+        ));
+
+        if (allEmbeddings.length === 0) {
+            return [];
+        }
+
+        // Calculate similarities and sort by relevance
+        const similarities = allEmbeddings.map(item => {
+            const storedEmbedding = JSON.parse(item.embedding);
+            const similarity = cosineSimilarity(queryEmbedding, storedEmbedding);
+            
+            return {
+                content: item.chunkContent,
+                filename: item.documentFilename,
+                similarity
+            };
+        });
+
+        // Sort by similarity (highest first) and take top results
+        const topResults = similarities
+            .sort((a, b) => b.similarity - a.similarity)
+            .slice(0, limit);
+
+        return topResults.map(result => 
+            `[From ${result.filename}]: ${result.content}`
+        );
+
+    } catch (error) {
+        console.error('Error retrieving relevant chunks:', error);
+        return [];
+    }
 }
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
@@ -142,11 +254,29 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 				try {
 					// Build strict ancestor context for this conversation + latest user message
 					const ancestorMessages = await getAncestorMessages(validConversationId!, parentId ?? null, true);
-					const messagesForAI = [
-						...ancestorMessages.map((msg: any) => ({ role: msg.role, content: msg.content })),
-						{ role: 'user', content: userMessage.content }
+					
+					// Retrieve relevant document chunks for RAG
+					const relevantChunks = await retrieveRelevantChunks(
+						userMessage.content, 
+						validConversationId!, 
+						session.user.id
+					);
+
+					// Prepare messages for AI with RAG context
+					let messagesForAI = [
+						...ancestorMessages.map((msg: any) => ({ role: msg.role, content: msg.content }))
 					];
+
+					// Add RAG context if available
+					if (relevantChunks.length > 0) {
+						const ragContext = `Based on the following document context, please answer the user's question:\n\n${relevantChunks.join('\n\n')}\n\nUser question: ${userMessage.content}`;
+						messagesForAI.push({ role: 'user', content: ragContext });
+					} else {
+						messagesForAI.push({ role: 'user', content: userMessage.content });
+					}
+
 					console.log('POST context size:', messagesForAI.length);
+					console.log('RAG chunks found:', relevantChunks.length);
 					
 					// Generate streaming response using Gemini
 					const result = await streamText({

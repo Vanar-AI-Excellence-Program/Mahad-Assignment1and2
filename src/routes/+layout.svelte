@@ -3,8 +3,7 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 
-	// Data is used in the conditional rendering logic
-	export let data: any;
+	// Layout component for the application
 
 	let isScrolled = false;
 	let isMobileMenuOpen = false;

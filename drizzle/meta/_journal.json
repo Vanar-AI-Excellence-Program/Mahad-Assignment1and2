@@ -29,6 +29,13 @@
       "when": 1755269177622,
       "tag": "0003_misty_butterfly",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1756762092868,
+      "tag": "0004_talented_monster_badoon",
+      "breakpoints": true
     }
   ]
 }
