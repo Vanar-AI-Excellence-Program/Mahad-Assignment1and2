@@ -701,6 +701,90 @@
 		stopWordStreaming(); // Clean up any active streaming
 	});
 
+	// Copy button functionality for AI responses
+	function copyAIResponse(event: Event) {
+		const button = event.currentTarget as HTMLButtonElement;
+		const aiResponseContainer = button.closest('.ai-response-container');
+		
+		if (!aiResponseContainer) return;
+		
+		// Find the message content within the AI response container
+		const messageContent = aiResponseContainer.querySelector('.markdown-content');
+		if (!messageContent) return;
+		
+		// Get the text content (without HTML tags)
+		const textToCopy = messageContent.textContent || (messageContent as HTMLElement).innerText || '';
+		
+		// Use modern clipboard API
+		if (navigator.clipboard && window.isSecureContext) {
+			navigator.clipboard.writeText(textToCopy).then(() => {
+				// Show success feedback
+				showCopyFeedback(button, true);
+			}).catch(err => {
+				console.error('Failed to copy: ', err);
+				// Fallback to older method
+				fallbackCopyTextToClipboard(textToCopy, button);
+			});
+		} else {
+			// Fallback for older browsers or non-secure contexts
+			fallbackCopyTextToClipboard(textToCopy, button);
+		}
+	}
+	
+	function fallbackCopyTextToClipboard(text: string, button: HTMLButtonElement) {
+		const textArea = document.createElement('textarea');
+		textArea.value = text;
+		textArea.style.position = 'fixed';
+		textArea.style.left = '-999999px';
+		textArea.style.top = '-999999px';
+		document.body.appendChild(textArea);
+		textArea.focus();
+		textArea.select();
+		
+		try {
+			const successful = document.execCommand('copy');
+			if (successful) {
+				showCopyFeedback(button, true);
+			} else {
+				showCopyFeedback(button, false);
+			}
+		} catch (err) {
+			console.error('Fallback copy failed: ', err);
+			showCopyFeedback(button, false);
+		}
+		
+		document.body.removeChild(textArea);
+	}
+	
+	function showCopyFeedback(button: HTMLButtonElement, success: boolean) {
+		const originalText = button.innerHTML;
+		const originalClasses = button.className;
+		
+		if (success) {
+			button.innerHTML = `
+				<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+				</svg>
+				Copied!
+			`;
+			button.className = originalClasses + ' copied';
+		} else {
+			button.innerHTML = `
+				<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+				</svg>
+				Failed
+			`;
+			button.className = originalClasses + ' failed';
+		}
+		
+		// Revert after 1.5 seconds
+		setTimeout(() => {
+			button.innerHTML = originalText;
+			button.className = originalClasses;
+		}, 1500);
+	}
+
 	// File upload handler
 	async function handleFileUpload() {
 		const fileInput = document.createElement('input');
@@ -1066,20 +1150,34 @@
 										</div>
 									{/if}
 								{:else}
-									<div class="flex items-center space-x-2 lg:space-x-3 mb-2">
+									<div class="ai-response-container">
+										<div class="flex items-center space-x-2 lg:space-x-3 mb-2">
 											<div class="w-6 h-6 lg:w-8 lg:h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
 												<svg class="w-3 h-3 lg:w-4 lg:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
 												</svg>
-										</div>
+											</div>
 											<span class="text-xs lg:text-sm font-semibold text-blue-600">AI Assistant</span>
+										</div>
+										<MessageRenderer 
+											content={message.content} 
+											isLoading={false}
+											isError={false}
+											sources={messageSources[message.id] || []}
+										/>
+										<!-- Copy button for AI response — safe isolated scope -->
+										<button
+											on:click={copyAIResponse}
+											class="copy-button"
+											aria-label="Copy AI response"
+											title="Copy this AI response to clipboard"
+										>
+											<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+											</svg>
+											Copy
+										</button>
 									</div>
-									<MessageRenderer 
-										content={message.content} 
-										isLoading={false}
-										isError={false}
-										sources={messageSources[message.id] || []}
-									/>
 								{/if}
 							</div>
 						</div>
@@ -1111,39 +1209,53 @@
 					{#if pendingUserMessage && isLoading}
 						<div class="flex justify-start">
 							<div class="max-w-xs sm:max-w-md lg:max-w-2xl px-3 lg:px-6 py-3 lg:py-4 rounded-2xl bg-white border-2 border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-								<div class="flex items-center space-x-2 lg:space-x-3 mb-2">
-									<div class="w-6 h-6 lg:w-8 lg:h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-										<svg class="w-3 h-3 lg:w-4 lg:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
-										</svg>
+								<div class="ai-response-container">
+									<div class="flex items-center space-x-2 lg:space-x-3 mb-2">
+										<div class="w-6 h-6 lg:w-8 lg:h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+											<svg class="w-3 h-3 lg:w-4 lg:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+											</svg>
+										</div>
+										<span class="text-xs lg:text-sm font-semibold text-blue-600">AI Assistant</span>
 									</div>
-									<span class="text-xs lg:text-sm font-semibold text-blue-600">AI Assistant</span>
-								</div>
-								
-								{#if streamingAIResponse && streamingActive}
-									<!-- Show streaming response -->
-									<div class="relative">
-										<MessageRenderer 
-											content={streamingAIResponse} 
-											isLoading={false}
-											isError={false}
-											sources={messageSources['pending'] || []}
-										/>
-										<!-- Typing cursor for active streaming -->
-										<span class="inline-block w-0.5 h-4 bg-blue-500 ml-1 animate-pulse"></span>
-									</div>
+									
+									{#if streamingAIResponse && streamingActive}
+										<!-- Show streaming response -->
+										<div class="relative">
+											<MessageRenderer 
+												content={streamingAIResponse} 
+												isLoading={false}
+												isError={false}
+												sources={messageSources['pending'] || []}
+											/>
+											<!-- Typing cursor for active streaming -->
+											<span class="inline-block w-0.5 h-4 bg-blue-500 ml-1 animate-pulse"></span>
+										</div>
+										<!-- Copy button for streaming AI response — safe isolated scope -->
+										<button
+											on:click={copyAIResponse}
+											class="copy-button"
+											aria-label="Copy AI response"
+											title="Copy this AI response to clipboard"
+										>
+											<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+											</svg>
+											Copy
+										</button>
 
-								{:else}
-									<!-- Show thinking animation -->
-								<div class="flex items-center space-x-2">
-									<span class="text-sm lg:text-base text-gray-700 font-medium">Thinking</span>
-									<div class="flex space-x-1">
-										<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce"></div>
-										<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-										<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+									{:else}
+										<!-- Show thinking animation -->
+									<div class="flex items-center space-x-2">
+										<span class="text-sm lg:text-base text-gray-700 font-medium">Thinking</span>
+										<div class="flex space-x-1">
+											<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce"></div>
+											<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+											<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+										</div>
 									</div>
+									{/if}
 								</div>
-								{/if}
 							</div>
 						</div>
 					{/if}
@@ -1225,4 +1337,53 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	/* Copy button styles for AI responses */
+	.copy-button {
+		cursor: pointer;
+		font-size: 0.9em;
+		margin-top: 0.5em;
+		padding: 0.25rem 0.5rem;
+		background-color: #f3f4f6;
+		border: 1px solid #d1d5db;
+		border-radius: 0.375rem;
+		color: #6b7280;
+		transition: all 0.2s ease-in-out;
+		display: inline-flex;
+		align-items: center;
+		font-size: 0.75rem;
+		font-weight: 500;
+	}
+
+	.copy-button:hover {
+		background-color: #e5e7eb;
+		border-color: #9ca3af;
+		color: #374151;
+		transform: translateY(-1px);
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	}
+
+	.copy-button:focus {
+		outline: none;
+		box-shadow: 0 0 0 2px #3b82f6;
+	}
+
+	.copy-button.copied {
+		color: #059669;
+		background-color: #d1fae5;
+		border-color: #10b981;
+	}
+
+	.copy-button.failed {
+		color: #dc2626;
+		background-color: #fee2e2;
+		border-color: #ef4444;
+	}
+
+	/* AI response container positioning */
+	.ai-response-container {
+		position: relative;
+	}
+</style>
 
