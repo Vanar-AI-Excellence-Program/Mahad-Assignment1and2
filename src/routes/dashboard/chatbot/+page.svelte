@@ -39,6 +39,9 @@
 	let editingContent = '';
 	let autoScrollRequested = false;
 	
+	// Search state
+	let searchQuery = '';
+	
 	// Upload state
 	let isUploading = false;
 	let uploadMessage = '';
@@ -162,6 +165,14 @@
 		lastMessage: getLastMessage(conversations[convId]),
 		createdAt: getConversationCreatedAt(conversations[convId])
 	})).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+	
+	// Filter conversations based on search query
+	$: filteredConversationList = conversationList.filter(conversation => {
+		if (!searchQuery.trim()) return true;
+		const query = searchQuery.toLowerCase();
+		return conversation.title.toLowerCase().includes(query) || 
+			   conversation.lastMessage.toLowerCase().includes(query);
+	});
 
 	// Load chat history from database
 	async function loadChatHistory() {
@@ -1050,6 +1061,34 @@
 						</button>
 					</div>
 					<p class="text-sm text-gray-600">Your previous conversations</p>
+					
+					<!-- Search Bar -->
+					<div class="mt-4">
+						<div class="relative">
+							<input
+								type="text"
+								placeholder="Search conversations..."
+								bind:value={searchQuery}
+								class="w-full px-3 py-2 pl-10 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+							/>
+							<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+								<svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+								</svg>
+							</div>
+							{#if searchQuery}
+								<button
+									on:click={() => searchQuery = ''}
+									class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+									aria-label="Clear search"
+								>
+									<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+									</svg>
+								</button>
+							{/if}
+						</div>
+					</div>
 				</div>
 				
 				<div class="flex-1 overflow-y-auto p-3 lg:p-4 space-y-3 max-h-64 lg:max-h-none">
@@ -1063,8 +1102,18 @@
 							<p class="text-sm">No conversations yet</p>
 							<p class="text-xs text-gray-400">Start a new chat to begin</p>
 						</div>
+					{:else if filteredConversationList.length === 0 && searchQuery}
+						<div class="text-center text-gray-500 py-6 lg:py-8">
+							<div class="w-12 h-12 lg:w-16 lg:h-16 mx-auto mb-3 lg:mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+								<svg class="w-6 h-6 lg:w-8 lg:h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+								</svg>
+							</div>
+							<p class="text-sm">No conversations found</p>
+							<p class="text-xs text-gray-400">Try a different search term</p>
+						</div>
 					{:else}
-						{#each conversationList as conversation}
+						{#each filteredConversationList as conversation}
 								<button
 									on:click={() => loadConversation(conversation.id)}
 									class="w-full text-left p-2 lg:p-3 rounded-lg hover:bg-blue-50 transition-all duration-200 border-2 border-gray-100 hover:border-blue-200 hover:shadow-sm"
