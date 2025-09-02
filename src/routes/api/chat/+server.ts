@@ -699,4 +699,177 @@ async function getAncestorMessages(conversationId: string, targetId: string | nu
 	return messages;
 }
 
+// Regeneration API endpoint
+export const PATCH: RequestHandler = async ({ request, cookies }) => {
+	try {
+		// Check authentication
+		const sessionToken = cookies.get('authjs.session-token');
+
+		if (!sessionToken) {
+			return new Response('Unauthorized', { status: 401 });
+		}
+
+		// Check if session exists and is valid
+		const session = await db.query.sessions.findFirst({
+			where: and(
+				eq(sessions.sessionToken, sessionToken),
+				gt(sessions.expires, new Date())
+			),
+			with: {
+				user: true
+			}
+		});
+
+		if (!session?.user) {
+			return new Response('Unauthorized', { status: 401 });
+		}
+
+		const { messageId } = await request.json();
+
+		if (!messageId) {
+			return new Response('Message ID is required', { status: 400 });
+		}
+
+		// Get the AI message to regenerate
+		const aiMessage = await db.query.chats.findFirst({
+			where: eq(chats.id, messageId),
+			with: {
+				conversation: true
+			}
+		});
+
+		if (!aiMessage || aiMessage.role !== 'assistant') {
+			return new Response('AI message not found', { status: 404 });
+		}
+
+		// Verify user owns this conversation
+		if (aiMessage.conversation?.userId !== session.user.id) {
+			return new Response('Unauthorized', { status: 401 });
+		}
+
+		// Get the user message that prompted this AI response
+		const userMessage = await db.query.chats.findFirst({
+			where: eq(chats.id, aiMessage.parentId!),
+		});
+
+		if (!userMessage || userMessage.role !== 'user') {
+			return new Response('Parent user message not found', { status: 404 });
+		}
+
+		// Get conversation context for regeneration
+		const contextMessages = await getAncestorMessages(aiMessage.conversationId!, userMessage.id, true);
+
+		// Retrieve relevant document chunks for context
+		const { chunks: contextChunks, sources } = await retrieveRelevantChunks(
+			userMessage.content,
+			aiMessage.conversationId!,
+			session.user.id,
+			3
+		);
+
+		// Create streaming response
+		const stream = new ReadableStream({
+			async start(controller) {
+				try {
+					// Prepare context for AI
+					const contextPrompt = contextChunks.length > 0 
+						? `\n\nRelevant context from uploaded documents:\n${contextChunks.join('\n\n')}\n\n`
+						: '';
+
+					// Create messages array for AI
+					const messages = [
+						...contextMessages.map(msg => ({
+							role: msg.role as 'user' | 'assistant',
+							content: msg.content
+						}))
+					];
+
+					// Add the user message that needs regeneration
+					messages.push({
+						role: 'user',
+						content: userMessage.content
+					});
+
+					console.log('Regenerating AI response for message:', messageId);
+					console.log('Context messages count:', contextMessages.length);
+					console.log('Sources found:', sources.length);
+
+					// Call Gemini API with streaming
+					const result = await streamText({
+						model: google('gemini-2.0-flash-exp'),
+						messages,
+						system: `You are a helpful AI assistant. Provide clear, accurate, and helpful responses.${contextPrompt}`,
+					});
+					
+					console.log('Gemini API call successful, starting streaming for regeneration');
+
+					let fullContent = '';
+
+					// Stream the response chunks
+					for await (const chunk of result.textStream) {
+						fullContent += chunk;
+						const encoder = new TextEncoder();
+						const data = encoder.encode(`data: ${JSON.stringify({ chunk })}\n\n`);
+						controller.enqueue(data);
+					}
+
+					// Save the regenerated AI response as a sibling to the original
+					if (fullContent.trim()) {
+						await db.insert(chats).values({
+							conversationId: aiMessage.conversationId!,
+							parentId: userMessage.id, // Same parent as original AI response
+							role: 'assistant',
+							content: fullContent,
+							version: 1
+						});
+					}
+
+					// Send sources if available
+					if (sources.length > 0) {
+						const encoder = new TextEncoder();
+						const sourcesData = encoder.encode(`data: ${JSON.stringify({ type: 'sources', sources })}\n\n`);
+						controller.enqueue(sourcesData);
+					}
+
+					// Send end signal
+					const encoder = new TextEncoder();
+					const endData = encoder.encode(`data: [DONE]\n\n`);
+					controller.enqueue(endData);
+					controller.close();
+
+				} catch (error) {
+					console.error('Streaming error during regeneration:', error);
+					console.error('Regeneration error details:', {
+						messageId: messageId,
+						errorMessage: error instanceof Error ? error.message : 'Unknown error',
+						errorStack: error instanceof Error ? error.stack : undefined
+					});
+					
+					const encoder = new TextEncoder();
+					const errorData = encoder.encode(`data: ${JSON.stringify({ error: 'Streaming failed during regeneration', details: error instanceof Error ? error.message : 'Unknown error' })}\n\n`);
+					controller.enqueue(errorData);
+					controller.close();
+				}
+			}
+		});
+
+		// Return streaming response
+		return new Response(stream, {
+			headers: {
+				'Content-Type': 'text/plain; charset=utf-8',
+				'Cache-Control': 'no-cache',
+				'Connection': 'keep-alive',
+			},
+		});
+
+	} catch (error) {
+		console.error('Regeneration API error:', error);
+		console.error('Error details:', {
+			errorMessage: error instanceof Error ? error.message : 'Unknown error',
+			errorStack: error instanceof Error ? error.stack : undefined
+		});
+		return new Response('Internal server error', { status: 500 });
+	}
+};
+
 
