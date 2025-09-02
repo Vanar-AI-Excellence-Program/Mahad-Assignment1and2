@@ -1130,14 +1130,7 @@
 			<!-- Chat Messages Area -->
 			<div class="flex-1 bg-white overflow-hidden min-h-0">
 				<div id="chat-container" class="h-full overflow-y-auto p-3 lg:p-6 space-y-4 lg:space-y-6">
-					<!-- Debug info -->
-					<div class="bg-yellow-100 p-2 rounded text-xs text-gray-700 mb-4">
-						<strong>Debug:</strong> Tree size: {Object.keys(currentChatTree).length} | 
-						Current node: {currentNodeId || 'null'} | 
-						Messages: {messages.length} | 
-						Display: {displayMessages.length} | 
-						Conversation: {currentConversationId || 'null'}
-					</div>
+
 					
 					{#if displayMessages.length === 0}
 						<div class="flex flex-col items-center justify-center h-full text-center text-gray-500 px-4">
