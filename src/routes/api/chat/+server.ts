@@ -107,6 +107,8 @@ async function retrieveRelevantChunks(query: string, conversationId: string, use
             const storedEmbedding = JSON.parse(item.embedding);
             const similarity = cosineSimilarity(queryEmbedding, storedEmbedding);
             
+            console.log(`Similarity for "${item.chunkContent.substring(0, 50)}...": ${similarity}`);
+            
             return {
                 content: item.chunkContent,
                 filename: item.documentFilename,
@@ -119,15 +121,54 @@ async function retrieveRelevantChunks(query: string, conversationId: string, use
             .sort((a, b) => b.similarity - a.similarity)
             .slice(0, limit);
 
+        console.log('Top results similarities:', topResults.map(r => ({ similarity: r.similarity, content: r.content.substring(0, 30) })));
+
         const contextChunks = topResults.map(result => 
             `[From ${result.filename}]: ${result.content}`
         );
         
-        const sources = topResults.map(result => ({
-            filename: result.filename,
-            content: result.content.length > 200 ? result.content.substring(0, 200) + '...' : result.content,
-            similarity: Math.round(result.similarity * 100)
-        }));
+        const sources = topResults.map(result => {
+            // Convert similarity to a more meaningful percentage
+            // Cosine similarity ranges from -1 to 1, where 1 is most similar
+            // For negative values, we'll use a different scale
+            // For positive values, use a more granular scale
+            let percentage = 0;
+            
+            if (result.similarity >= 0.8) {
+                percentage = 100;
+            } else if (result.similarity >= 0.6) {
+                percentage = 90;
+            } else if (result.similarity >= 0.4) {
+                percentage = 80;
+            } else if (result.similarity >= 0.2) {
+                percentage = 70;
+            } else if (result.similarity >= 0.1) {
+                percentage = 60;
+            } else if (result.similarity >= 0.05) {
+                percentage = 50;
+            } else if (result.similarity >= 0.01) {
+                percentage = 40;
+            } else if (result.similarity >= 0.001) {
+                percentage = 30;
+            } else if (result.similarity > 0) {
+                percentage = 20;
+            } else if (result.similarity >= -0.1) {
+                percentage = 15;
+            } else if (result.similarity >= -0.2) {
+                percentage = 10;
+            } else if (result.similarity >= -0.3) {
+                percentage = 5;
+            }
+            // Anything below -0.3 gets 0%
+            
+            console.log(`Final similarity for "${result.filename}": ${result.similarity} -> ${percentage}%`);
+            
+            return {
+                filename: result.filename,
+                content: result.content.length > 200 ? result.content.substring(0, 200) + '...' : result.content,
+                similarity: percentage
+            };
+        });
 
         return { chunks: contextChunks, sources };
 
