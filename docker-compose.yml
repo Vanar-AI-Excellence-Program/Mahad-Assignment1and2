@@ -12,5 +12,16 @@ services:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
 
+  embedding-service:
+    build: ./embedding-service
+    container_name: embedding_service
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    depends_on:
+      - postgres
+
 volumes:
   postgres_data:
