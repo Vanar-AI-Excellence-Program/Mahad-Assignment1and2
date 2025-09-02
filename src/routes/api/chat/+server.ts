@@ -76,12 +76,12 @@ function cosineSimilarity(vecA: number[], vecB: number[]): number {
 }
 
 // Helper function to retrieve relevant document chunks
-async function retrieveRelevantChunks(query: string, conversationId: string, userId: string, limit: number = 3): Promise<string[]> {
+async function retrieveRelevantChunks(query: string, conversationId: string, userId: string, limit: number = 3): Promise<{ chunks: string[], sources: Array<{filename: string, content: string, similarity: number}> }> {
     try {
         // Generate embedding for the query
         const queryEmbedding = await generateQueryEmbedding(query);
         if (queryEmbedding.length === 0) {
-            return [];
+            return { chunks: [], sources: [] };
         }
 
         // Get all embeddings for the user's documents in this conversation
@@ -99,7 +99,7 @@ async function retrieveRelevantChunks(query: string, conversationId: string, use
         ));
 
         if (allEmbeddings.length === 0) {
-            return [];
+            return { chunks: [], sources: [] };
         }
 
         // Calculate similarities and sort by relevance
@@ -119,13 +119,21 @@ async function retrieveRelevantChunks(query: string, conversationId: string, use
             .sort((a, b) => b.similarity - a.similarity)
             .slice(0, limit);
 
-        return topResults.map(result => 
+        const contextChunks = topResults.map(result => 
             `[From ${result.filename}]: ${result.content}`
         );
+        
+        const sources = topResults.map(result => ({
+            filename: result.filename,
+            content: result.content.length > 200 ? result.content.substring(0, 200) + '...' : result.content,
+            similarity: Math.round(result.similarity * 100)
+        }));
+
+        return { chunks: contextChunks, sources };
 
     } catch (error) {
         console.error('Error retrieving relevant chunks:', error);
-        return [];
+        return { chunks: [], sources: [] };
     }
 }
 
@@ -268,15 +276,15 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 					];
 
 					// Add RAG context if available
-					if (relevantChunks.length > 0) {
-						const ragContext = `Based on the following document context, please answer the user's question:\n\n${relevantChunks.join('\n\n')}\n\nUser question: ${userMessage.content}`;
+					if (relevantChunks.chunks.length > 0) {
+						const ragContext = `Based on the following document context, please answer the user's question:\n\n${relevantChunks.chunks.join('\n\n')}\n\nUser question: ${userMessage.content}`;
 						messagesForAI.push({ role: 'user', content: ragContext });
 					} else {
 						messagesForAI.push({ role: 'user', content: userMessage.content });
 					}
 
 					console.log('POST context size:', messagesForAI.length);
-					console.log('RAG chunks found:', relevantChunks.length);
+					console.log('RAG chunks found:', relevantChunks.chunks.length);
 					
 					// Generate streaming response using Gemini
 					const result = await streamText({
@@ -310,6 +318,13 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 						} catch (dbError) {
 							console.error('Failed to save assistant message:', dbError);
 						}
+					}
+
+					// Send source information if available
+					if (relevantChunks.sources && relevantChunks.sources.length > 0) {
+						const encoder = new TextEncoder();
+						const sourceData = encoder.encode(`data: ${JSON.stringify({ type: 'sources', sources: relevantChunks.sources })}\n\n`);
+						safeEnqueue(sourceData);
 					}
 
 					// Send end signal

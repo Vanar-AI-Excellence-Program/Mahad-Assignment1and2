@@ -49,6 +49,9 @@
 	// Word-by-word streaming state
 	let wordBuffer: string[] = [];
 	let wordStreamingInterval: NodeJS.Timeout | null = null;
+	
+	// Source information for messages
+	let messageSources: Record<string, Array<{filename: string, content: string, similarity: number}>> = {};
 
 	// Persist/restore UI state (conversation + active node)
 	const UI_STATE_KEY = 'chat_ui_state_v1';
@@ -462,6 +465,14 @@
 												if (latestAIMessage) {
 													currentNodeId = latestAIMessage.id;
 													console.log('Navigated to latest AI response:', latestAIMessage.id, 'for user message:', newUserMessage.id);
+													
+													// Move pending sources to the actual AI message ID
+													if (messageSources['pending']) {
+														messageSources[latestAIMessage.id] = messageSources['pending'];
+														delete messageSources['pending'];
+														console.log('📚 Moved sources from pending to AI message:', latestAIMessage.id);
+													}
+													
 													// Ensure we save the UI state with the correct conversation
 													saveUIState();
 										} else {
@@ -491,6 +502,10 @@
 											addWordsToBuffer(parsed.chunk);
 											console.log('📝 Chunk received, added to word buffer:', parsed.chunk);
 											console.log('📄 Words in buffer:', wordBuffer.length, 'Current display length:', streamingAIResponse.length);
+										} else if (parsed.type === 'sources' && parsed.sources) {
+											// Store source information temporarily for the pending message
+											messageSources['pending'] = parsed.sources;
+											console.log('📚 Sources received for pending message:', parsed.sources);
 										}
 									} catch (e) {
 										console.log('Failed to parse chunk data:', data, e);
@@ -1061,8 +1076,9 @@
 									</div>
 									<MessageRenderer 
 										content={message.content} 
-											isLoading={false}
-											isError={false}
+										isLoading={false}
+										isError={false}
+										sources={messageSources[message.id] || []}
 									/>
 								{/if}
 							</div>
@@ -1085,6 +1101,7 @@
 									content={pendingUserMessage} 
 									isLoading={false}
 									isError={false}
+									sources={[]}
 								/>
 							</div>
 						</div>
@@ -1110,6 +1127,7 @@
 											content={streamingAIResponse} 
 											isLoading={false}
 											isError={false}
+											sources={messageSources['pending'] || []}
 										/>
 										<!-- Typing cursor for active streaming -->
 										<span class="inline-block w-0.5 h-4 bg-blue-500 ml-1 animate-pulse"></span>
