@@ -386,8 +386,8 @@ export function getAIRegenerationVersions(chatTree: ChatTree, originalMessageId:
     node.conversationId === originalMessage.conversationId
   );
 
-  // Sort by creation time so original is first
-  regeneratedVersions.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  // Sort by version number so original (v1) is first, then v2, v3, etc.
+  regeneratedVersions.sort((a, b) => (a.version || 1) - (b.version || 1));
 
   return regeneratedVersions;
 }

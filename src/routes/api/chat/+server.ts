@@ -815,12 +815,30 @@ export const PATCH: RequestHandler = async ({ request, cookies }) => {
 
 					// Save the regenerated AI response as a sibling to the original
 					if (fullContent.trim()) {
+						// Get the highest version number for AI responses with the same parent
+						const existingVersions = await db.query.chats.findMany({
+							where: and(
+								eq(chats.parentId, userMessage.id),
+								eq(chats.role, 'assistant'),
+								eq(chats.conversationId, aiMessage.conversationId!)
+							),
+							orderBy: [desc(chats.version)]
+						});
+
+						// Calculate next version number
+						const nextVersion = existingVersions.length > 0 
+							? (existingVersions[0].version || 1) + 1 
+							: 1;
+
+						console.log('Creating regenerated AI response with version:', nextVersion);
+						
 						await db.insert(chats).values({
 							conversationId: aiMessage.conversationId!,
 							parentId: userMessage.id, // Same parent as original AI response
 							role: 'assistant',
 							content: fullContent,
-							version: 1
+							version: nextVersion,
+							isEdited: false // AI responses are regenerated, not edited
 						});
 					}
 
