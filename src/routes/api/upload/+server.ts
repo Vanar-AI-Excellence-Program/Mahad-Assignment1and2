@@ -119,10 +119,37 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
         let content: string;
         if (file.type === 'text/plain') {
             content = await file.text();
+        } else if (file.type === 'application/pdf') {
+            // Parse PDF using the embedding service
+            try {
+                console.log('Parsing PDF file:', file.name);
+                
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const pdfResponse = await fetch(`${embeddingApiUrl}/parse-pdf`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!pdfResponse.ok) {
+                    const errorText = await pdfResponse.text();
+                    console.error('PDF parsing error:', errorText);
+                    throw new Error(`PDF parsing failed: ${pdfResponse.statusText}`);
+                }
+                
+                const pdfResult = await pdfResponse.json();
+                content = pdfResult.text;
+                console.log(`Successfully parsed PDF: ${pdfResult.pages} pages, ${content.length} characters`);
+            } catch (error) {
+                console.error('Error parsing PDF:', error);
+                return json({ 
+                    error: 'Failed to parse PDF file',
+                    details: error instanceof Error ? error.message : 'Unknown error'
+                }, { status: 400 });
+            }
         } else {
-            // For PDF files, you'd need a PDF parser library
-            // For now, we'll return an error
-            return json({ error: 'PDF parsing not implemented yet' }, { status: 400 });
+            return json({ error: 'Unsupported file type' }, { status: 400 });
         }
 
         // Create document record

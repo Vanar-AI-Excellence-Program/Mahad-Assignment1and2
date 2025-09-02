@@ -49,9 +49,12 @@
 	let streamingAIResponse = '';
 	let streamingActive = false;
 	
-	// Word-by-word streaming state
-	let wordBuffer: string[] = [];
-	let wordStreamingInterval: NodeJS.Timeout | null = null;
+	// Character-by-character streaming state
+	let charBuffer: string = '';
+	let charStreamingInterval: NodeJS.Timeout | null = null;
+	let charStreamingSpeed = 15; // milliseconds between characters (faster for better UX)
+	let isRegenerating = false;
+	let isEditing = false;
 	
 	// Source information for messages
 	let messageSources: Record<string, Array<{filename: string, content: string, similarity: number}>> = {};
@@ -88,44 +91,49 @@
 		}
 	}
 
-	// Word-by-word streaming functions
-	function startWordStreaming() {
-		if (wordStreamingInterval) {
-			clearInterval(wordStreamingInterval);
+	// Character-by-character streaming functions
+	function startCharStreaming() {
+		if (charStreamingInterval) {
+			clearInterval(charStreamingInterval);
 		}
 		
-		wordStreamingInterval = setInterval(() => {
-			if (wordBuffer.length > 0) {
-				const nextWord = wordBuffer.shift();
-				if (nextWord) {
-					streamingAIResponse += (streamingAIResponse ? ' ' : '') + nextWord;
-					streamingAIResponse = streamingAIResponse; // Trigger reactivity
+		charStreamingInterval = setInterval(() => {
+			if (charBuffer.length > 0) {
+				const nextChar = charBuffer.charAt(0);
+				charBuffer = charBuffer.slice(1);
+				streamingAIResponse += nextChar;
+				streamingAIResponse = streamingAIResponse; // Trigger reactivity
+				
+				// Debug logging for character streaming
+				if (charBuffer.length % 50 === 0 || charBuffer.length < 10) {
+					console.log(`📝 Streaming character: "${nextChar}", buffer remaining: ${charBuffer.length}, displayed: ${streamingAIResponse.length}`);
 				}
 			} else if (!streamingActive) {
-				// No more words in buffer and streaming is done
-				stopWordStreaming();
+				// No more characters in buffer and streaming is done
+				console.log('✅ Character streaming complete - buffer empty and streaming inactive');
+				stopCharStreaming();
 			}
-		}, 80); // 80ms delay between words for smooth effect
+		}, charStreamingSpeed);
 	}
 
-	function stopWordStreaming() {
-		if (wordStreamingInterval) {
-			clearInterval(wordStreamingInterval);
-			wordStreamingInterval = null;
+	function stopCharStreaming() {
+		if (charStreamingInterval) {
+			clearInterval(charStreamingInterval);
+			charStreamingInterval = null;
 		}
-		// Flush any remaining words immediately
-		if (wordBuffer.length > 0) {
-			const remainingWords = wordBuffer.join(' ');
-			streamingAIResponse += (streamingAIResponse ? ' ' : '') + remainingWords;
-			streamingAIResponse = streamingAIResponse;
-			wordBuffer = [];
-		}
+		// Don't flush remaining characters immediately - let them stream naturally
+		// The interval will continue until charBuffer is empty
 	}
 
-	function addWordsToBuffer(text: string) {
-		// Split text into words and add to buffer
-		const words = text.trim().split(/\s+/).filter(word => word.length > 0);
-		wordBuffer.push(...words);
+	function addCharsToBuffer(text: string) {
+		// Add text to character buffer
+		charBuffer += text;
+	}
+
+	function finishCharStreaming() {
+		// Mark streaming as inactive, but let characters continue to stream
+		streamingActive = false;
+		// The interval will continue until charBuffer is empty, then stopCharStreaming() will be called
 	}
 	
 	// Computed values for current conversation
@@ -268,6 +276,13 @@
 		try {
 			isLoading = true;
 			
+			// Set up streaming state for edit
+			streamingAIResponse = '';
+			streamingActive = false;
+			charBuffer = '';
+			isEditing = true;
+			stopCharStreaming(); // Clear any existing streaming
+			
 			// Call the edit API to create a new branch with streaming
 			console.log('Calling edit API with:', { messageId: editingMessageId, newContent: editingContent });
 			const response = await fetch('/api/chat', {
@@ -297,58 +312,72 @@
 						for (const line of lines) {
 							if (line.startsWith('data: ')) {
 								const data = line.slice(6);
-								if (data === '[DONE]') {
-										// Streaming complete, reload chat history
-										console.log('Edit streaming complete, reloading chat history...');
-									await loadChatHistory();
-										console.log('Chat history reloaded after edit, current tree size:', Object.keys(currentChatTree).length);
+																	if (data === '[DONE]') {
+										// Edit streaming complete, let remaining characters stream naturally
+										console.log('✅ Edit streaming complete, finishing character streaming...');
+										finishCharStreaming(); // Let remaining characters stream naturally
+										
+										// Wait for character streaming to complete naturally, then reload
+										setTimeout(async () => {
+											streamingAIResponse = '';
+											isEditing = false;
+											await loadChatHistory();
+											console.log('Chat history reloaded after edit, current tree size:', Object.keys(currentChatTree).length);
 
-										// Navigate to the new branch
-										// Find the new user message first (the edited one)
-										const newUserMessage = Object.values(currentChatTree).find(node =>
-											node.role === 'user' &&
-											node.content === editingContent &&
-											node.isEdited === true
-										);
-
-										if (newUserMessage) {
-											// Then find the AI response that has this new user message as parent
-											const newAIMessage = Object.values(currentChatTree).find(node =>
-												node.role === 'assistant' &&
-												node.parentId === newUserMessage.id
+											// Navigate to the new branch
+											// Find the new user message first (the edited one)
+											const newUserMessage = Object.values(currentChatTree).find(node =>
+												node.role === 'user' &&
+												node.content === editingContent &&
+												node.isEdited === true
 											);
 
-											if (newAIMessage) {
-												currentNodeId = newAIMessage.id;
-												console.log('Navigated to new AI response after edit:', newAIMessage.id);
+											if (newUserMessage) {
+												// Then find the AI response that has this new user message as parent
+												const newAIMessage = Object.values(currentChatTree).find(node =>
+													node.role === 'assistant' &&
+													node.parentId === newUserMessage.id
+												);
+
+												if (newAIMessage) {
+													currentNodeId = newAIMessage.id;
+													console.log('Navigated to new AI response after edit:', newAIMessage.id);
+												} else {
+													// If no AI response found, navigate to the new user message
+													currentNodeId = newUserMessage.id;
+													console.log('Navigated to new user message (no AI response yet):', newUserMessage.id);
+												}
+
+												// Ensure we stay in the same conversation and persist selection
+												currentConversationId = newUserMessage.conversationId;
+												saveUIState();
+												// Do not auto-scroll here; user is focused on this context
+
 											} else {
-												// If no AI response found, navigate to the new user message
-												currentNodeId = newUserMessage.id;
-												console.log('Navigated to new user message (no AI response yet):', newUserMessage.id);
-											}
-
-											// Ensure we stay in the same conversation and persist selection
-											currentConversationId = newUserMessage.conversationId;
-											saveUIState();
-											// Do not auto-scroll here; user is focused on this context
-
-										} else {
-											console.log('No new user message found after edit');
-											console.log('Available messages:', Object.values(currentChatTree).map(m => ({
-												role: m.role,
-												content: m.content.substring(0, 50),
-												isEdited: m.isEdited
-											})));
-									}
-									
-									cancelEditing();
+												console.log('No new user message found after edit');
+												console.log('Available messages:', Object.values(currentChatTree).map(m => ({
+													role: m.role,
+													content: m.content.substring(0, 50),
+													isEdited: m.isEdited
+												})));
+										}
+										
+										cancelEditing();
+										}, 1000); // Wait 1 second for character streaming to complete naturally
 									break;
 									} else {
 								try {
 									const parsed = JSON.parse(data);
 									if (parsed.chunk) {
-												accumulatedResponse += parsed.chunk;
-												console.log('Received edit chunk:', parsed.chunk);
+												if (!streamingActive) {
+													streamingActive = true;
+													startCharStreaming(); // Start character-by-character streaming
+												}
+												
+												// Add characters from this chunk to the buffer
+												addCharsToBuffer(parsed.chunk);
+												console.log('📝 Edit chunk received, added to character buffer:', parsed.chunk);
+												console.log('📄 Characters in buffer:', charBuffer.length, 'Current display length:', streamingAIResponse.length);
 									}
 								} catch (e) {
 											console.log('Failed to parse edit chunk data:', data, e);
@@ -363,6 +392,10 @@
 				} else {
 					// Fallback: reload chat history if streaming fails
 					console.log('No reader available, falling back to direct reload');
+					streamingActive = false;
+					stopCharStreaming();
+					streamingAIResponse = '';
+					isEditing = false;
 					await loadChatHistory();
 					cancelEditing();
 				}
@@ -390,8 +423,8 @@
 			pendingUserMessage = userMessage;
 			streamingAIResponse = '';
 			streamingActive = false;
-			wordBuffer = [];
-			stopWordStreaming(); // Clear any existing streaming
+			charBuffer = '';
+			stopCharStreaming(); // Clear any existing streaming
 			
 			try {
 				isLoading = true;
@@ -435,12 +468,11 @@
 								if (line.startsWith('data: ')) {
 									const data = line.slice(6);
 									if (data === '[DONE]') {
-											// Streaming complete, clear pending state and reload chat history
-											console.log('✅ Streaming complete, finishing word streaming...');
-											streamingActive = false;
-											stopWordStreaming(); // Finish any remaining words immediately
+											// Streaming complete, let remaining characters stream naturally
+											console.log('✅ Streaming complete, finishing character streaming...');
+											finishCharStreaming(); // Let remaining characters stream naturally
 											
-											// Wait a moment for word streaming to complete, then reload
+											// Wait for character streaming to complete naturally, then reload
 											setTimeout(async () => {
 												pendingUserMessage = null;
 												streamingAIResponse = '';
@@ -490,7 +522,7 @@
 													conversationId: m.conversationId 
 												})));
 											}
-												}, 200); // Wait 200ms for word streaming to complete
+												}, 1000); // Wait 1 second for character streaming to complete naturally
 										break;
 										} else {
 									try {
@@ -498,13 +530,13 @@
 										if (parsed.chunk) {
 											if (!streamingActive) {
 												streamingActive = true;
-												startWordStreaming(); // Start word-by-word streaming
+												startCharStreaming(); // Start character-by-character streaming
 											}
 											
-											// Add words from this chunk to the buffer
-											addWordsToBuffer(parsed.chunk);
-											console.log('📝 Chunk received, added to word buffer:', parsed.chunk);
-											console.log('📄 Words in buffer:', wordBuffer.length, 'Current display length:', streamingAIResponse.length);
+											// Add characters from this chunk to the buffer
+											addCharsToBuffer(parsed.chunk);
+											console.log('📝 Chunk received, added to character buffer:', parsed.chunk);
+											console.log('📄 Characters in buffer:', charBuffer.length, 'Current display length:', streamingAIResponse.length);
 										} else if (parsed.type === 'sources' && parsed.sources) {
 											// Store source information temporarily for the pending message
 											messageSources['pending'] = parsed.sources;
@@ -523,7 +555,7 @@
 										} else {
 						// Fallback: reload chat history if streaming fails
 						streamingActive = false;
-						stopWordStreaming();
+						stopCharStreaming();
 						pendingUserMessage = null;
 						streamingAIResponse = '';
 						await loadChatHistory();
@@ -560,7 +592,7 @@
 				alert('Error sending message. Please try again.');
 				// Clear pending state on error
 				streamingActive = false;
-				stopWordStreaming();
+				stopCharStreaming();
 				pendingUserMessage = null;
 				streamingAIResponse = '';
 			} finally {
@@ -683,6 +715,13 @@
 		try {
 			isLoading = true;
 			
+			// Set up streaming state for regeneration
+			streamingAIResponse = '';
+			streamingActive = false;
+			charBuffer = '';
+			isRegenerating = true;
+			stopCharStreaming(); // Clear any existing streaming
+			
 			// Call the regeneration API
 			const response = await fetch('/api/chat', {
 				method: 'PATCH',
@@ -709,35 +748,50 @@
 								if (line.startsWith('data: ')) {
 									const data = line.slice(6);
 									if (data === '[DONE]') {
-										// Regeneration complete, reload chat history
-										console.log('Regeneration streaming complete, reloading chat history...');
-										await loadChatHistory();
+										// Regeneration streaming complete, let remaining characters stream naturally
+										console.log('✅ Regeneration streaming complete, finishing character streaming...');
+										finishCharStreaming(); // Let remaining characters stream naturally
 										
-										// Navigate to the new regenerated response
-										const regeneratedMessage = Object.values(currentChatTree).find(node =>
-											node.role === 'assistant' &&
-											node.parentId === currentChatTree[messageId]?.parentId &&
-											node.id !== messageId
-										);
+										// Wait for character streaming to complete naturally, then reload
+										setTimeout(async () => {
+											streamingAIResponse = '';
+											isRegenerating = false;
+											await loadChatHistory();
+											console.log('Chat history reloaded after regeneration');
+											
+											// Navigate to the new regenerated response
+											const regeneratedMessage = Object.values(currentChatTree).find(node =>
+												node.role === 'assistant' &&
+												node.parentId === currentChatTree[messageId]?.parentId &&
+												node.id !== messageId
+											);
 
-										if (regeneratedMessage) {
-											// Navigate to the latest AI response in the subtree from this regeneration
-											// This ensures we see the continuation of the conversation from this AI response
-											currentNodeId = getLatestAssistantInSubtree(currentChatTree, regeneratedMessage.id);
-											console.log('Navigated to regenerated AI response with continuation:', currentNodeId);
-											saveUIState();
-										}
+											if (regeneratedMessage) {
+												// Navigate to the latest AI response in the subtree from this regeneration
+												// This ensures we see the continuation of the conversation from this AI response
+												currentNodeId = getLatestAssistantInSubtree(currentChatTree, regeneratedMessage.id);
+												console.log('Navigated to regenerated AI response with continuation:', currentNodeId);
+												saveUIState();
+											}
+										}, 1000); // Wait 1 second for character streaming to complete naturally
 										break;
 									} else {
 										try {
 											const parsed = JSON.parse(data);
 											if (parsed.chunk) {
-												accumulatedResponse += parsed.chunk;
-												console.log('Received regeneration chunk:', parsed.chunk);
+												if (!streamingActive) {
+													streamingActive = true;
+													startCharStreaming(); // Start character-by-character streaming
+												}
+												
+												// Add characters from this chunk to the buffer
+												addCharsToBuffer(parsed.chunk);
+												console.log('📝 Regeneration chunk received, added to character buffer:', parsed.chunk);
+												console.log('📄 Characters in buffer:', charBuffer.length, 'Current display length:', streamingAIResponse.length);
 											} else if (parsed.type === 'sources' && parsed.sources) {
 												// Store source information for the regenerated message
 												messageSources[messageId] = parsed.sources;
-												console.log('Sources received for regenerated message:', parsed.sources);
+												console.log('📚 Sources received for regenerated message:', parsed.sources);
 											}
 										} catch (e) {
 											console.log('Failed to parse regeneration chunk data:', data, e);
@@ -752,6 +806,10 @@
 				} else {
 					// Fallback: reload chat history if streaming fails
 					console.log('No reader available, falling back to direct reload');
+					streamingActive = false;
+					stopCharStreaming();
+					streamingAIResponse = '';
+					isRegenerating = false;
 					await loadChatHistory();
 				}
 			} else {
@@ -830,7 +888,7 @@
 	// Save UI state on component destroy
 	onDestroy(() => {
 		saveUIState();
-		stopWordStreaming(); // Clean up any active streaming
+		stopCharStreaming(); // Clean up any active streaming
 	});
 
 	// Copy button functionality for AI responses
@@ -1383,7 +1441,7 @@
 					{/if}
 
 					<!-- AI response (thinking state or streaming) -->
-					{#if pendingUserMessage && isLoading}
+					{#if (pendingUserMessage && isLoading) || (isRegenerating && streamingActive) || (isEditing && streamingActive)}
 						<div class="flex justify-start">
 							<div class="max-w-xs sm:max-w-md lg:max-w-2xl px-3 lg:px-6 py-3 lg:py-4 rounded-2xl bg-white border-2 border-gray-100 shadow-sm hover:shadow-md transition-shadow">
 								<div class="ai-response-container">
@@ -1394,10 +1452,15 @@
 											</svg>
 										</div>
 										<span class="text-xs lg:text-sm font-semibold text-blue-600">AI Assistant</span>
+										{#if isRegenerating}
+											<span class="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded-full">Regenerating</span>
+										{:else if isEditing}
+											<span class="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">Responding to Edit</span>
+										{/if}
 									</div>
 									
 									{#if streamingAIResponse && streamingActive}
-										<!-- Show streaming response -->
+										<!-- Show character-by-character streaming response -->
 										<div class="relative">
 											<MessageRenderer 
 												content={streamingAIResponse} 
@@ -1425,7 +1488,15 @@
 									{:else}
 										<!-- Show thinking animation -->
 									<div class="flex items-center space-x-2">
-										<span class="text-sm lg:text-base text-gray-700 font-medium">Thinking</span>
+										<span class="text-sm lg:text-base text-gray-700 font-medium">
+											{#if isRegenerating}
+												Regenerating response...
+											{:else if isEditing}
+												Responding to your edit...
+											{:else}
+												Thinking
+											{/if}
+										</span>
 										<div class="flex space-x-1">
 											<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce"></div>
 											<div class="w-1.5 h-1.5 lg:w-2 lg:h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>

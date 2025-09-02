@@ -66,6 +66,7 @@
 		"postgres": "^3.4.3",
 		"prismjs": "^1.30.0",
 		"svelte": "^5.0.0",
+		"svelte-typed-js": "^1.0.3",
 		"zod": "^3.25.76"
 	}
 }

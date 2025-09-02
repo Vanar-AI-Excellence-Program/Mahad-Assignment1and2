@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import google.generativeai as genai
@@ -6,6 +6,9 @@ import os
 import json
 from typing import List, Optional
 import logging
+import PyPDF2
+import pdfplumber
+import io
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -55,6 +58,12 @@ class BatchEmbeddingResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     model: str
+
+class PDFParseResponse(BaseModel):
+    text: str
+    pages: int
+    success: bool
+    message: str
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
@@ -144,6 +153,68 @@ async def generate_batch_embeddings(request: BatchEmbeddingRequest):
     except Exception as e:
         logger.error(f"Error generating batch embeddings: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate batch embeddings: {str(e)}")
+
+@app.post("/parse-pdf", response_model=PDFParseResponse)
+async def parse_pdf(file: UploadFile = File(...)):
+    """Parse PDF file and extract text"""
+    try:
+        logger.info(f"Parsing PDF file: {file.filename}")
+        
+        # Validate file type
+        if not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="File must be a PDF")
+        
+        # Read file content
+        content = await file.read()
+        
+        # Try pdfplumber first (better for complex layouts)
+        text = ""
+        pages = 0
+        
+        try:
+            with pdfplumber.open(io.BytesIO(content)) as pdf:
+                pages = len(pdf.pages)
+                for page_num, page in enumerate(pdf.pages):
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += f"\n--- Page {page_num + 1} ---\n"
+                        text += page_text
+                        text += "\n"
+                logger.info(f"Successfully parsed PDF with pdfplumber: {pages} pages")
+        except Exception as e:
+            logger.warning(f"pdfplumber failed, trying PyPDF2: {e}")
+            # Fallback to PyPDF2
+            try:
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
+                pages = len(pdf_reader.pages)
+                for page_num, page in enumerate(pdf_reader.pages):
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += f"\n--- Page {page_num + 1} ---\n"
+                        text += page_text
+                        text += "\n"
+                logger.info(f"Successfully parsed PDF with PyPDF2: {pages} pages")
+            except Exception as e2:
+                logger.error(f"Both PDF parsers failed: {e2}")
+                raise HTTPException(status_code=500, detail=f"Failed to parse PDF: {str(e2)}")
+        
+        if not text.strip():
+            raise HTTPException(status_code=400, detail="No text could be extracted from the PDF")
+        
+        logger.info(f"Extracted {len(text)} characters from {pages} pages")
+        
+        return PDFParseResponse(
+            text=text.strip(),
+            pages=pages,
+            success=True,
+            message=f"Successfully extracted text from {pages} pages"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error parsing PDF: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to parse PDF: {str(e)}")
 
 @app.get("/models")
 async def list_models():
