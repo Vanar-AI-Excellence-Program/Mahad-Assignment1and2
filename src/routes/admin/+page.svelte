@@ -26,74 +26,74 @@
   }
 </script>
 
-<div class="px-4 sm:px-6 lg:px-8 py-8 bg-gradient-to-br from-gray-50 via-white to-gray-50 min-h-screen">
+<div class="px-4 sm:px-6 lg:px-8 py-8 matrix-bg min-h-screen">
   <!-- Header Section -->
   <div class="mb-8">
     <div class="flex items-center space-x-3 mb-4">
-      <div class="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-glow">
+      <div class="w-12 h-12 bg-gradient-to-br from-primary-400 to-electric-500 rounded-2xl flex items-center justify-center shadow-neon animate-glow-pulse">
         <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
         </svg>
       </div>
       <div>
-        <h1 class="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-        <p class="text-gray-600 mt-1">Manage users and view system analytics</p>
+        <h1 class="text-3xl font-display font-bold text-neon">Admin Dashboard</h1>
+        <p class="text-gray-300 mt-1">Manage users and view system analytics</p>
       </div>
     </div>
   </div>
 
   <!-- Stats Grid -->
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-    <div class="admin-stats-card group">
+    <div class="card-glass group hover-lift">
       <div class="flex items-center justify-between">
         <div>
-          <div class="admin-stats-label">Total Users</div>
-          <div class="admin-stats-value text-blue-600">{data.stats.total}</div>
+          <div class="text-sm font-medium text-gray-400">Total Users</div>
+          <div class="text-2xl font-bold text-primary-400">{data.stats.total}</div>
         </div>
-        <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center group-hover:bg-blue-200 transition-colors duration-300">
-          <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="w-12 h-12 bg-gradient-to-br from-primary-400/20 to-electric-500/20 rounded-xl flex items-center justify-center group-hover:from-primary-400/30 group-hover:to-electric-500/30 transition-all duration-300">
+          <svg class="w-6 h-6 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
           </svg>
         </div>
       </div>
     </div>
     
-    <div class="admin-stats-card group">
+    <div class="card-glass group hover-lift">
       <div class="flex items-center justify-between">
         <div>
-          <div class="admin-stats-label">Verified Users</div>
-          <div class="admin-stats-value text-green-600">{data.stats.verified}</div>
+          <div class="text-sm font-medium text-gray-400">Verified Users</div>
+          <div class="text-2xl font-bold text-secondary-400">{data.stats.verified}</div>
         </div>
-        <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center group-hover:bg-green-200 transition-colors duration-300">
-          <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="w-12 h-12 bg-gradient-to-br from-secondary-400/20 to-secondary-500/20 rounded-xl flex items-center justify-center group-hover:from-secondary-400/30 group-hover:to-secondary-500/30 transition-all duration-300">
+          <svg class="w-6 h-6 text-secondary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
           </svg>
         </div>
       </div>
     </div>
     
-    <div class="admin-stats-card group">
+    <div class="card-glass group hover-lift">
       <div class="flex items-center justify-between">
         <div>
-          <div class="admin-stats-label">Admin Users</div>
-          <div class="admin-stats-value text-purple-600">{data.stats.admins}</div>
+          <div class="text-sm font-medium text-gray-400">Admin Users</div>
+          <div class="text-2xl font-bold text-electric-400">{data.stats.admins}</div>
         </div>
-        <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center group-hover:bg-purple-200 transition-colors duration-300">
-          <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="w-12 h-12 bg-gradient-to-br from-electric-400/20 to-electric-500/20 rounded-xl flex items-center justify-center group-hover:from-electric-400/30 group-hover:to-electric-500/30 transition-all duration-300">
+          <svg class="w-6 h-6 text-electric-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
           </svg>
         </div>
       </div>
     </div>
     
-    <div class="admin-stats-card group">
+    <div class="card-glass group hover-lift">
       <div class="flex items-center justify-between">
         <div>
-          <div class="admin-stats-label">Unverified</div>
-          <div class="admin-stats-value text-orange-600">{data.stats.total - data.stats.verified}</div>
+          <div class="text-sm font-medium text-gray-400">Unverified</div>
+          <div class="text-2xl font-bold text-accent-400">{data.stats.total - data.stats.verified}</div>
         </div>
-        <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center group-hover:bg-orange-200 transition-colors duration-300">
-          <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="w-12 h-12 bg-gradient-to-br from-accent-400/20 to-accent-500/20 rounded-xl flex items-center justify-center group-hover:from-accent-400/30 group-hover:to-accent-500/30 transition-all duration-300">
+          <svg class="w-6 h-6 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
           </svg>
         </div>
@@ -175,7 +175,7 @@
                   </span>
                 {/if}
               </td>
-              <td class="text-gray-500">
+              <td class="text-gray-300">
                 {new Date(u.createdAt).toLocaleDateString('en-US', { 
                   year: 'numeric', 
                   month: 'short', 

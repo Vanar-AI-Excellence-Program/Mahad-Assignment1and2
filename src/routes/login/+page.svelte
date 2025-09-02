@@ -85,24 +85,24 @@
 	<meta name="description" content="Sign in to your AuthFlow account to access your dashboard and manage your authentication settings." />
 </svelte:head>
 
-<div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-primary-50 py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+<div class="min-h-screen flex items-center justify-center matrix-bg py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
 	<!-- Background decorative elements -->
-	<div class="absolute inset-0 bg-grid-pattern opacity-5"></div>
-	<div class="absolute top-20 left-10 w-32 h-32 bg-primary-200 rounded-full opacity-20 animate-float"></div>
-	<div class="absolute bottom-20 right-10 w-24 h-24 bg-success-200 rounded-full opacity-20 animate-float" style="animation-delay: 1s;"></div>
+	<div class="absolute inset-0 cyber-grid opacity-10"></div>
+	<div class="absolute top-20 left-10 w-32 h-32 bg-gradient-to-br from-primary-400/20 to-electric-500/20 rounded-full opacity-30 animate-glow-pulse"></div>
+	<div class="absolute bottom-20 right-10 w-24 h-24 bg-gradient-to-br from-secondary-400/20 to-accent-400/20 rounded-full opacity-30 animate-glow-pulse" style="animation-delay: 1s;"></div>
 	
 	<div class="max-w-md w-full space-y-8 relative z-10">
 		<!-- Header -->
 		<div class="text-center animate-fade-in-up" bind:this={animatedElements[0]}>
-			<div class="w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-glow">
+			<div class="w-16 h-16 bg-gradient-to-br from-primary-400 to-electric-500 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-neon animate-glow-pulse">
 				<svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
 				</svg>
 			</div>
-			<h1 class="text-3xl font-bold text-gray-900 mb-2">
+			<h1 class="text-3xl font-display font-bold text-neon mb-2">
 				Welcome back
 			</h1>
-			<p class="text-gray-600">
+			<p class="text-gray-300">
 				Sign in to your account to continue
 			</p>
 		</div>
@@ -111,16 +111,16 @@
 		{#if error}
 			<div class="alert-error animate-fade-in-up" bind:this={animatedElements[1]}>
 				<div class="flex items-center">
-					<svg class="w-5 h-5 text-error-600 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<svg class="w-5 h-5 text-accent-400 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
 					</svg>
-					<span class="font-medium">{error}</span>
+					<span class="font-medium text-white">{error}</span>
 				</div>
 			</div>
 		{/if}
 
 		<!-- Login Form -->
-		<div class="card animate-fade-in-up" bind:this={animatedElements[2]} style="animation-delay: 200ms;">
+		<div class="card-glass animate-fade-in-up" bind:this={animatedElements[2]} style="animation-delay: 200ms;">
 			<div class="card-body">
 				<form class="space-y-6" on:submit|preventDefault={handleSubmit}>
 					<!-- Email Field -->
@@ -167,7 +167,7 @@
 					<button
 						type="submit"
 						disabled={isLoading}
-						class="btn-primary btn-lg w-full group"
+						class="btn-primary btn-lg w-full group neon-border"
 					>
 						{#if isLoading}
 							<span class="spinner-md mr-3"></span>
@@ -185,17 +185,17 @@
 				<div class="divider">
 					<div class="relative">
 						<div class="absolute inset-0 flex items-center">
-							<div class="w-full border-t border-gray-300"></div>
+							<div class="w-full border-t border-panel-700"></div>
 						</div>
 						<div class="relative flex justify-center text-sm">
-							<span class="px-2 bg-white text-gray-500">Or continue with</span>
+							<span class="px-2 bg-panel-900 text-gray-400">Or continue with</span>
 						</div>
 					</div>
 				</div>
 
 				<!-- Social Login Buttons -->
 				<div class="space-y-3">
-					<a href="/auth/oauth/google" class="btn-secondary btn-md w-full group">
+					<a href="/auth/oauth/google" class="btn-secondary btn-md w-full group neon-border">
 						<svg class="w-5 h-5 mr-3" viewBox="0 0 533.5 544.3" xmlns="http://www.w3.org/2000/svg">
 							<path d="M533.5 278.4c0-17.4-1.5-34.1-4.3-50.3H272v95.1h147.2c-6.4 34.6-25.9 63.9-55.3 83.6v69.4h89.4c52.3-48.2 80.2-119.2 80.2-197.8z" fill="#4285F4"/>
 							<path d="M272 544.3c72.9 0 134.2-24.2 178.9-65.8l-89.4-69.4c-24.8 16.7-56.6 26.6-89.5 26.6-68.9 0-127.2-46.5-148-108.9H33.1v68.3C77.7 486.9 167.1 544.3 272 544.3z" fill="#34A853"/>
@@ -205,7 +205,7 @@
 						Continue with Google
 					</a>
 					
-					<a href="/auth/oauth/github" class="btn-secondary btn-md w-full group">
+					<a href="/auth/oauth/github" class="btn-secondary btn-md w-full group neon-border">
 						<svg class="w-5 h-5 mr-3" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
 							<path fill="currentColor" d="M12 .5C5.7.5.9 5.3.9 11.6c0 4.9 3.2 9.1 7.6 10.6.6.1.8-.3.8-.6v-2.1c-3.1.7-3.8-1.3-3.8-1.3-.6-1.5-1.4-1.9-1.4-1.9-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.9 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.5-.3-5.1-1.3-5.1-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.6.1-3.4 0 0 1-.3 3.3 1.2.9-.2 1.9-.4 2.9-.4s2 .1 2.9.4c2.3-1.5 3.3-1.2 3.3-1.2.6 1.8.2 3.1.1 3.4.8.8 1.2 1.9 1.2 3.2 0 4.6-2.6 5.6-5.1 5.9.4.3.8 1 .8 2v3c0 .3.2.7.8.6 4.4-1.5 7.6-5.7 7.6-10.6C23.1 5.3 18.3.5 12 .5z"/>
 						</svg>
@@ -217,9 +217,9 @@
 
 		<!-- Sign Up Link -->
 		<div class="text-center animate-fade-in-up" bind:this={animatedElements[3]} style="animation-delay: 400ms;">
-			<p class="text-gray-600">
+			<p class="text-gray-300">
 				Don't have an account? 
-				<a href="/auth/register" class="text-primary-600 hover:text-primary-700 font-medium transition-colors duration-200">
+				<a href="/auth/register" class="text-primary-400 hover:text-glow-cyan font-medium transition-all duration-200">
 					Sign up for free
 				</a>
 			</p>
@@ -228,10 +228,10 @@
 		<!-- Additional Links -->
 		<div class="text-center animate-fade-in-up" bind:this={animatedElements[4]} style="animation-delay: 600ms;">
 			<div class="space-y-2">
-				<a href="/auth/forgot-password" class="text-sm text-gray-500 hover:text-gray-700 transition-colors duration-200 block">
+				<a href="/auth/forgot-password" class="text-sm text-gray-400 hover:text-glow-cyan transition-all duration-200 block">
 					Forgot your password?
 				</a>
-				<a href="/" class="text-sm text-gray-500 hover:text-gray-700 transition-colors duration-200 block">
+				<a href="/" class="text-sm text-gray-400 hover:text-glow-cyan transition-all duration-200 block">
 					← Back to home
 				</a>
 			</div>
@@ -240,10 +240,17 @@
 </div>
 
 <style>
-	.bg-grid-pattern {
-		background-image: 
-			linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px),
-			linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px);
-		background-size: 20px 20px;
+	/* Web3 login page specific styles */
+	.animate-fade-in-up {
+		opacity: 0;
+		transform: translateY(20px);
+		animation: fadeInUp 0.6s ease-out forwards;
+	}
+	
+	@keyframes fadeInUp {
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 </style>

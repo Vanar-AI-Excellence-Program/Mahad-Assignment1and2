@@ -91,8 +91,8 @@
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
 							</svg>
 						</div>
-						<h1 class="text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
-							Welcome back, <span class="text-gradient">{data.session.user?.email}</span>!
+						<h1 class="text-4xl lg:text-5xl font-display font-bold text-white mb-4">
+							Welcome back, <span class="text-neon">{data.session.user?.email}</span>!
 						</h1>
 						<p class="text-xl text-gray-600 mb-8 leading-relaxed">
 							You're successfully signed in. Access your dashboard to manage your account and explore all features.
@@ -108,9 +108,9 @@
 			{:else}
 				<!-- Guest user content -->
 				<div class="animate-fade-in-up" bind:this={animatedElements[0]}>
-					<h1 class="text-5xl lg:text-7xl font-bold text-gray-900 mb-6 text-balance">
+					<h1 class="text-5xl lg:text-7xl font-display font-bold text-white mb-6 text-balance">
 						Secure Authentication
-						<span class="block text-gradient">Made Simple</span>
+						<span class="block text-neon">Made Simple</span>
 					</h1>
 					<p class="text-xl lg:text-2xl text-gray-600 mb-12 max-w-3xl mx-auto leading-relaxed text-balance">
 						Enterprise-grade authentication solution built with cutting-edge technology. 
@@ -141,12 +141,12 @@
 
 {#if !data.session}
 <!-- Features Section -->
-<section id="features" class="py-20 lg:py-32 bg-white">
+<section id="features" class="py-20 lg:py-32 matrix-bg">
 	<div class="container-custom">
 		<div class="text-center mb-16 animate-on-scroll" bind:this={animatedElements[1]}>
-			<h2 class="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
+			<h2 class="text-4xl lg:text-5xl font-display font-bold text-white mb-6">
 				Everything You Need for
-				<span class="text-gradient">Secure Authentication</span>
+				<span class="text-neon">Secure Authentication</span>
 			</h2>
 			<p class="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
 				Built with modern security standards and best practices, AuthFlow provides all the tools you need to implement robust authentication in your applications.
@@ -161,8 +161,8 @@
 						<div class="w-16 h-16 bg-gradient-to-br {feature.color} rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-glow group-hover:shadow-glow-lg transition-all duration-300">
 							<span class="text-2xl">{feature.icon}</span>
 						</div>
-						<h3 class="text-xl font-semibold text-gray-900 mb-4">{feature.title}</h3>
-						<p class="text-gray-600 leading-relaxed">{feature.description}</p>
+						<h3 class="text-xl font-heading font-semibold text-white mb-4">{feature.title}</h3>
+						<p class="text-gray-300 leading-relaxed">{feature.description}</p>
 					</div>
 				</div>
 			</div>
@@ -172,12 +172,12 @@
 </section>
 
 <!-- Technology Stack Section -->
-<section id="technology" class="py-20 lg:py-32 bg-gray-50">
+<section id="technology" class="py-20 lg:py-32 matrix-bg">
 	<div class="container-custom">
 		<div class="text-center mb-16 animate-on-scroll" bind:this={animatedElements[8]}>
-			<h2 class="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
+			<h2 class="text-4xl lg:text-5xl font-display font-bold text-white mb-6">
 				Built with
-				<span class="text-gradient">Modern Technology</span>
+				<span class="text-neon">Modern Technology</span>
 			</h2>
 			<p class="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
 				Leveraging the latest web technologies and frameworks to deliver a fast, secure, and scalable authentication solution.
@@ -191,8 +191,8 @@
 					<div class="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-soft group-hover:shadow-medium transition-all duration-300 group-hover:-translate-y-1">
 						<span class="text-3xl">{tech.icon}</span>
 					</div>
-					<h3 class="font-semibold text-gray-900 mb-2">{tech.name}</h3>
-					<p class="text-sm text-gray-600 leading-relaxed">{tech.description}</p>
+					<h3 class="font-heading font-semibold text-white mb-2">{tech.name}</h3>
+					<p class="text-sm text-gray-300 leading-relaxed">{tech.description}</p>
 				</div>
 			</div>
 			{/each}
@@ -201,13 +201,13 @@
 </section>
 
 <!-- Security Section -->
-<section id="security" class="py-20 lg:py-32 bg-white">
+<section id="security" class="py-20 lg:py-32 matrix-bg">
 	<div class="container-custom">
 		<div class="max-w-4xl mx-auto">
 			<div class="text-center mb-16 animate-on-scroll" bind:this={animatedElements[15]}>
-				<h2 class="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
+				<h2 class="text-4xl lg:text-5xl font-display font-bold text-white mb-6">
 					Enterprise-Grade
-					<span class="text-gradient">Security</span>
+					<span class="text-neon">Security</span>
 				</h2>
 				<p class="text-xl text-gray-600 leading-relaxed">
 					Your security is our top priority. We implement industry best practices and cutting-edge security measures.
@@ -224,8 +224,8 @@
 								</svg>
 							</div>
 							<div>
-								<h3 class="font-semibold text-gray-900 mb-2">End-to-End Encryption</h3>
-								<p class="text-gray-600">All data is encrypted in transit and at rest using industry-standard encryption algorithms.</p>
+								<h3 class="font-heading font-semibold text-white mb-2">End-to-End Encryption</h3>
+								<p class="text-gray-300">All data is encrypted in transit and at rest using industry-standard encryption algorithms.</p>
 							</div>
 						</div>
 
@@ -236,8 +236,8 @@
 								</svg>
 							</div>
 							<div>
-								<h3 class="font-semibold text-gray-900 mb-2">Multi-Factor Authentication</h3>
-								<p class="text-gray-600">Support for TOTP, SMS, and email-based two-factor authentication.</p>
+								<h3 class="font-heading font-semibold text-white mb-2">Multi-Factor Authentication</h3>
+								<p class="text-gray-300">Support for TOTP, SMS, and email-based two-factor authentication.</p>
 							</div>
 						</div>
 
@@ -248,8 +248,8 @@
 								</svg>
 							</div>
 							<div>
-								<h3 class="font-semibold text-gray-900 mb-2">Rate Limiting & Protection</h3>
-								<p class="text-gray-600">Advanced rate limiting and protection against brute force attacks and DDoS.</p>
+								<h3 class="font-heading font-semibold text-white mb-2">Rate Limiting & Protection</h3>
+								<p class="text-gray-300">Advanced rate limiting and protection against brute force attacks and DDoS.</p>
 							</div>
 						</div>
 					</div>
@@ -263,8 +263,8 @@
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
 								</svg>
 							</div>
-							<h3 class="text-2xl font-semibold text-gray-900 mb-4">Security First</h3>
-							<p class="text-gray-600 mb-6">
+							<h3 class="text-2xl font-heading font-semibold text-white mb-4">Security First</h3>
+							<p class="text-gray-300 mb-6">
 								Built with security best practices and regularly audited for vulnerabilities.
 							</p>
 							<div class="flex justify-center space-x-2">

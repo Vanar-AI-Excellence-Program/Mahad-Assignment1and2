@@ -107,10 +107,10 @@
 <div class="container-custom py-8">
 	<!-- Welcome Header -->
 	<div class="mb-8 animate-fade-in-up" bind:this={animatedElements[0]}>
-		<h1 class="text-3xl lg:text-4xl font-bold text-gray-900 mb-2">
-			Welcome back, <span class="text-gradient">{data.session?.user?.firstName || data.session?.user?.email}</span>! 👋
+		<h1 class="text-3xl lg:text-4xl font-display font-bold text-white mb-2">
+			Welcome back, <span class="text-neon">{data.session?.user?.firstName || data.session?.user?.email}</span>! 👋
 		</h1>
-		<p class="text-lg text-gray-600">
+		<p class="text-lg text-gray-300">
 			Here's what's happening with your account today.
 		</p>
 	</div>
@@ -123,8 +123,8 @@
 				<div class="card-body">
 					<div class="flex items-center justify-between">
 						<div>
-							<p class="text-sm font-medium text-gray-600">{stat.name}</p>
-							<p class="text-2xl font-bold text-gray-900">{stat.value}</p>
+							<p class="text-sm font-medium text-gray-400">{stat.name}</p>
+							<p class="text-2xl font-bold text-white">{stat.value}</p>
 						</div>
 						<div class="w-12 h-12 bg-gradient-to-br {stat.color} rounded-xl flex items-center justify-center shadow-glow">
 							<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -208,40 +208,40 @@
 
 	<!-- Account Overview -->
 	<div class="mt-8 animate-on-scroll" bind:this={animatedElements[6]}>
-		<div class="card">
+		<div class="card-glass">
 			<div class="card-header">
-				<h2 class="text-xl font-semibold text-gray-900">Account Overview</h2>
-				<p class="text-sm text-gray-600">Your account details and status</p>
+				<h2 class="text-xl font-heading font-semibold text-white">Account Overview</h2>
+				<p class="text-sm text-gray-300">Your account details and status</p>
 			</div>
 			<div class="card-body">
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 					<div class="space-y-4">
 						<div class="flex items-center justify-between">
-							<span class="text-sm font-medium text-gray-600">Email Address</span>
-							<span class="text-sm text-gray-900">{data.session?.user?.email}</span>
+							<span class="text-sm font-medium text-gray-400">Email Address</span>
+							<span class="text-sm text-white">{data.session?.user?.email}</span>
 						</div>
 						<div class="flex items-center justify-between">
-							<span class="text-sm font-medium text-gray-600">Account Status</span>
-							<span class="badge-success">Active</span>
+							<span class="text-sm font-medium text-gray-400">Account Status</span>
+							<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary-400/20 text-secondary-400 border border-secondary-400/30">Active</span>
 						</div>
 						<div class="flex items-center justify-between">
-							<span class="text-sm font-medium text-gray-600">Email Verified</span>
-							<span class="badge-success">Verified</span>
+							<span class="text-sm font-medium text-gray-400">Email Verified</span>
+							<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary-400/20 text-secondary-400 border border-secondary-400/30">Verified</span>
 						</div>
 					</div>
 					
 					<div class="space-y-4">
 						<div class="flex items-center justify-between">
-							<span class="text-sm font-medium text-gray-600">Member Since</span>
-							<span class="text-sm text-gray-900">Today</span>
+							<span class="text-sm font-medium text-gray-400">Member Since</span>
+							<span class="text-sm text-white">Today</span>
 						</div>
 						<div class="flex items-center justify-between">
-							<span class="text-sm font-medium text-gray-600">Last Login</span>
-							<span class="text-sm text-gray-900">Just now</span>
+							<span class="text-sm font-medium text-gray-400">Last Login</span>
+							<span class="text-sm text-white">Just now</span>
 						</div>
 						<div class="flex items-center justify-between">
-							<span class="text-sm font-medium text-gray-600">Security Level</span>
-							<span class="badge-primary">High</span>
+							<span class="text-sm font-medium text-gray-400">Security Level</span>
+							<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-400/20 text-primary-400 border border-primary-400/30">High</span>
 						</div>
 					</div>
 				</div>

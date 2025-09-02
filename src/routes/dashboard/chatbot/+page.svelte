@@ -1045,22 +1045,22 @@
 	<title>Chatbot - AuthFlow Dashboard</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gray-50 p-2 sm:p-4">
+<div class="min-h-screen matrix-bg p-2 sm:p-4">
 	<div class="max-w-7xl mx-auto h-[calc(100vh-6rem)] sm:h-[calc(100vh-8rem)] flex flex-col lg:flex-row">
 		<!-- Chat History Sidebar -->
 		{#if showHistory}
-			<div class="w-full lg:w-80 bg-white rounded-t-xl lg:rounded-l-xl lg:rounded-t-none shadow-sm border-b-2 lg:border-r-2 lg:border-b-0 border-gray-100 flex flex-col flex-shrink-0">
-				<div class="p-4 lg:p-6 border-b-2 border-gray-100">
+			<div class="w-full lg:w-80 glass-strong rounded-t-xl lg:rounded-l-xl lg:rounded-t-none shadow-large border-b-2 lg:border-r-2 lg:border-b-0 border-panel-700 flex flex-col flex-shrink-0">
+				<div class="p-4 lg:p-6 border-b-2 border-panel-700">
 					<div class="flex items-center justify-between mb-4">
-						<h2 class="text-lg lg:text-xl font-semibold text-gray-900">Chat History</h2>
+						<h2 class="text-lg lg:text-xl font-heading font-semibold text-white">Chat History</h2>
 						<button
 							on:click={startNewChat}
-							class="px-3 lg:px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md transform hover:scale-105 active:scale-95"
+							class="px-3 lg:px-4 py-2 bg-gradient-to-r from-primary-500 to-electric-500 text-white rounded-lg hover:from-primary-600 hover:to-electric-600 transition-all duration-200 text-sm font-medium shadow-neon hover:shadow-neon transform hover:scale-105 active:scale-95 neon-border"
 						>
 							New Chat
 						</button>
 					</div>
-					<p class="text-sm text-gray-600">Your previous conversations</p>
+					<p class="text-sm text-gray-300">Your previous conversations</p>
 					
 					<!-- Search Bar -->
 					<div class="mt-4">
@@ -1069,7 +1069,7 @@
 								type="text"
 								placeholder="Search conversations..."
 								bind:value={searchQuery}
-								class="w-full px-3 py-2 pl-10 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+								class="w-full px-3 py-2 pl-10 text-sm bg-panel-800/50 border border-panel-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent transition-all duration-200 text-white placeholder-gray-400 backdrop-blur-sm"
 							/>
 							<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
 								<svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1079,7 +1079,7 @@
 							{#if searchQuery}
 								<button
 									on:click={() => searchQuery = ''}
-									class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+									class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-glow-cyan transition-all duration-200"
 									aria-label="Clear search"
 								>
 									<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1091,49 +1091,49 @@
 					</div>
 				</div>
 				
-				<div class="flex-1 overflow-y-auto p-3 lg:p-4 space-y-3 max-h-64 lg:max-h-none">
+				<div class="flex-1 overflow-y-auto p-3 lg:p-4 space-y-3 max-h-64 lg:max-h-none scrollbar-thin">
 					{#if conversationList.length === 0}
-						<div class="text-center text-gray-500 py-6 lg:py-8">
-							<div class="w-12 h-12 lg:w-16 lg:h-16 mx-auto mb-3 lg:mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+						<div class="text-center text-gray-400 py-6 lg:py-8">
+							<div class="w-12 h-12 lg:w-16 lg:h-16 mx-auto mb-3 lg:mb-4 bg-panel-800/50 rounded-full flex items-center justify-center">
 								<svg class="w-6 h-6 lg:w-8 lg:h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
 								</svg>
 							</div>
-							<p class="text-sm">No conversations yet</p>
-							<p class="text-xs text-gray-400">Start a new chat to begin</p>
+							<p class="text-sm text-gray-300">No conversations yet</p>
+							<p class="text-xs text-gray-500">Start a new chat to begin</p>
 						</div>
 					{:else if filteredConversationList.length === 0 && searchQuery}
-						<div class="text-center text-gray-500 py-6 lg:py-8">
-							<div class="w-12 h-12 lg:w-16 lg:h-16 mx-auto mb-3 lg:mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+						<div class="text-center text-gray-400 py-6 lg:py-8">
+							<div class="w-12 h-12 lg:w-16 lg:h-16 mx-auto mb-3 lg:mb-4 bg-panel-800/50 rounded-full flex items-center justify-center">
 								<svg class="w-6 h-6 lg:w-8 lg:h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
 								</svg>
 							</div>
-							<p class="text-sm">No conversations found</p>
-							<p class="text-xs text-gray-400">Try a different search term</p>
+							<p class="text-sm text-gray-300">No conversations found</p>
+							<p class="text-xs text-gray-500">Try a different search term</p>
 						</div>
 					{:else}
 						{#each filteredConversationList as conversation}
 								<button
 									on:click={() => loadConversation(conversation.id)}
-									class="w-full text-left p-2 lg:p-3 rounded-lg hover:bg-blue-50 transition-all duration-200 border-2 border-gray-100 hover:border-blue-200 hover:shadow-sm"
+									class="w-full text-left p-2 lg:p-3 rounded-lg hover:bg-panel-800/50 transition-all duration-200 border-2 border-panel-700 hover:border-primary-400 hover:shadow-glow neon-border"
 								>
 									<div class="flex items-start space-x-2 lg:space-x-3">
-										<div class="w-6 h-6 lg:w-8 lg:h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-											<svg class="w-3 h-3 lg:w-4 lg:h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<div class="w-6 h-6 lg:w-8 lg:h-8 bg-gradient-to-br from-primary-400/20 to-electric-500/20 rounded-full flex items-center justify-center flex-shrink-0">
+											<svg class="w-3 h-3 lg:w-4 lg:h-4 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
 											</svg>
 										</div>
 										<div class="flex-1 min-w-0">
 											<div class="flex items-center space-x-2 mb-1">
-												<p class="text-xs lg:text-sm font-medium text-gray-900 truncate">
+												<p class="text-xs lg:text-sm font-medium text-white truncate">
 													{conversation.title}
 												</p>
 											</div>
-											<p class="text-xs text-gray-500">
+											<p class="text-xs text-gray-400">
 												{conversation.lastMessage}
 											</p>
-											<p class="text-xs text-gray-400">
+											<p class="text-xs text-gray-500">
 												{new Date(conversation.createdAt).toLocaleDateString()}
 													</p>
 												</div>
@@ -1148,13 +1148,13 @@
 		<!-- Main Chat Area -->
 		<div class="flex-1 flex flex-col min-h-0">
 			<!-- Chat Header -->
-			<div class="bg-white rounded-b-xl lg:rounded-r-xl lg:rounded-b-none shadow-sm border-b-2 lg:border-b-0 border-gray-100 px-4 lg:px-6 py-3 lg:py-4 flex-shrink-0">
+			<div class="glass-strong rounded-b-xl lg:rounded-r-xl lg:rounded-b-none shadow-large border-b-2 lg:border-b-0 border-panel-700 px-4 lg:px-6 py-3 lg:py-4 flex-shrink-0">
 				<div class="flex items-center justify-between">
 					<div class="flex items-center space-x-2 lg:space-x-3">
 						{#if showHistory}
 							<button
 								on:click={() => showHistory = false}
-								class="p-1.5 lg:p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600 hover:text-gray-800"
+								class="p-1.5 lg:p-2 hover:bg-panel-800/50 rounded-lg transition-all duration-200 text-gray-300 hover:text-glow-cyan neon-border"
 								aria-label="Hide chat history sidebar"
 							>
 								<svg class="w-4 h-4 lg:w-5 lg:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1164,7 +1164,7 @@
 						{:else}
 							<button
 								on:click={() => showHistory = true}
-								class="p-1.5 lg:p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600 hover:text-gray-800"
+								class="p-1.5 lg:p-2 hover:bg-panel-800/50 rounded-lg transition-all duration-200 text-gray-300 hover:text-glow-cyan neon-border"
 								aria-label="Show chat history sidebar"
 							>
 								<svg class="w-4 h-4 lg:w-5 lg:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1173,14 +1173,14 @@
 							</button>
 						{/if}
 						
-						<div class="w-8 h-8 lg:w-12 lg:h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
+						<div class="w-8 h-8 lg:w-12 lg:h-12 bg-gradient-to-br from-primary-400 to-electric-500 rounded-full flex items-center justify-center shadow-neon animate-glow-pulse">
 							<svg class="w-4 h-4 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
 							</svg>
 						</div>
 						<div>
-							<h1 class="text-lg lg:text-2xl font-bold text-gray-900">AI Assistant</h1>
-							<p class="text-xs lg:text-sm text-gray-600">Powered by Gemini 2.0 Flash</p>
+							<h1 class="text-lg lg:text-2xl font-display font-bold text-neon">AI Assistant</h1>
+							<p class="text-xs lg:text-sm text-gray-300">Powered by Gemini 2.0 Flash</p>
 						</div>
 					</div>
 					
@@ -1190,7 +1190,7 @@
 							<button
 								on:click={goToPreviousBranch}
 								disabled={!navigationInfo.hasParent}
-								class="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+								class="p-2 hover:bg-panel-800/50 rounded-lg transition-all duration-200 text-gray-300 hover:text-glow-cyan disabled:opacity-50 disabled:cursor-not-allowed neon-border"
 								title="Go to parent message"
 								aria-label="Navigate to parent message in conversation tree"
 							>
@@ -1199,14 +1199,14 @@
 								</svg>
 							</button>
 							
-							<span class="text-xs text-gray-500 font-medium">
+							<span class="text-xs text-gray-400 font-medium">
 								{currentNodeId ? "Branch View" : "Main Conversation"}
 							</span>
 							
 							<button
 								on:click={goToNextBranch}
 								disabled={!navigationInfo.hasNext}
-								class="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+								class="p-2 hover:bg-panel-800/50 rounded-lg transition-all duration-200 text-gray-300 hover:text-glow-cyan disabled:opacity-50 disabled:cursor-not-allowed neon-border"
 								title="Go to next message"
 								aria-label="Navigate to next message in conversation tree"
 							>
@@ -1222,7 +1222,7 @@
 										currentNodeId = rootMessage.id;
 									}
 								}}
-								class="px-3 py-1.5 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors font-medium"
+								class="px-3 py-1.5 text-xs bg-panel-800/50 hover:bg-panel-700/50 text-primary-400 hover:text-glow-cyan rounded-lg transition-all duration-200 font-medium neon-border"
 								title="Back to full conversation"
 							>
 								<svg class="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1234,15 +1234,15 @@
 					{/if}
 					
 					<div class="flex items-center space-x-2">
-						<div class="w-2 h-2 lg:w-3 lg:h-3 bg-green-500 rounded-full animate-pulse"></div>
-						<span class="text-xs lg:text-sm text-gray-600 font-medium">Online</span>
+						<div class="w-2 h-2 lg:w-3 lg:h-3 bg-secondary-400 rounded-full animate-pulse shadow-glow-cyan"></div>
+						<span class="text-xs lg:text-sm text-gray-300 font-medium">Online</span>
 					</div>
 				</div>
 			</div>
 
 			<!-- Chat Messages Area -->
-			<div class="flex-1 bg-white overflow-hidden min-h-0">
-				<div id="chat-container" class="h-full overflow-y-auto p-3 lg:p-6 space-y-4 lg:space-y-6">
+			<div class="flex-1 glass overflow-hidden min-h-0">
+				<div id="chat-container" class="h-full overflow-y-auto p-3 lg:p-6 space-y-4 lg:space-y-6 scrollbar-thin">
 
 					
 					{#if displayMessages.length === 0}
@@ -1575,7 +1575,7 @@
 					<button
 						type="button"
 						on:click={handleFileUpload}
-						class="px-3 lg:px-4 py-3 lg:py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-2 border-green-400 hover:border-green-500 rounded-xl lg:rounded-2xl transition-all duration-200 flex items-center justify-center shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 active:scale-95"
+						class="px-3 lg:px-4 py-3 lg:py-4 bg-gradient-to-r from-secondary-500 to-secondary-600 hover:from-secondary-600 hover:to-secondary-700 text-white border-2 border-secondary-400 hover:border-secondary-500 rounded-xl lg:rounded-2xl transition-all duration-200 flex items-center justify-center shadow-glow-cyan hover:shadow-glow-cyan disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 active:scale-95 neon-border"
 						disabled={isLoading || isUploading}
 						aria-label="Upload file"
 						title="Upload documents for Q&A"
@@ -1596,14 +1596,14 @@
 							bind:value={input}
 							type="text"
 							placeholder="Ask me anything... I'm here to help!"
-							class="w-full px-3 lg:px-6 py-3 lg:py-4 text-base lg:text-lg border-2 border-gray-200 rounded-xl lg:rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all duration-200 resize-none hover:border-gray-300 focus:shadow-md"
+							class="w-full px-3 lg:px-6 py-3 lg:py-4 text-base lg:text-lg bg-panel-800/50 border-2 border-panel-600 rounded-xl lg:rounded-2xl focus:ring-2 focus:ring-primary-400 focus:border-transparent outline-none transition-all duration-200 resize-none hover:border-panel-500 focus:shadow-glow text-white placeholder-gray-400 backdrop-blur-sm"
 							disabled={isLoading || isUploading}
 						/>
 						{#if input.trim()}
 							<button
 								type="button"
 								on:click={() => input = ''}
-								class="absolute right-2 lg:right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-gray-100 rounded-full"
+								class="absolute right-2 lg:right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-glow-cyan transition-all duration-200 p-1 hover:bg-panel-800/50 rounded-full"
 								aria-label="Clear input text"
 							>
 								<svg class="w-4 h-4 lg:w-5 lg:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1615,7 +1615,7 @@
 					<button
 						type="submit"
 						disabled={!input.trim() || isLoading || isUploading}
-						class="px-4 lg:px-8 py-3 lg:py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl lg:rounded-2xl font-semibold hover:from-blue-700 hover:to-purple-700 focus:ring-4 focus:ring-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center space-x-2 lg:space-x-3 shadow-lg hover:shadow-xl text-sm lg:text-base transform hover:scale-105 active:scale-95"
+						class="px-4 lg:px-8 py-3 lg:py-4 bg-gradient-to-r from-primary-500 to-electric-500 text-white rounded-xl lg:rounded-2xl font-semibold hover:from-primary-600 hover:to-electric-600 focus:ring-4 focus:ring-primary-400/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center space-x-2 lg:space-x-3 shadow-neon hover:shadow-neon text-sm lg:text-base transform hover:scale-105 active:scale-95 neon-border"
 					>
 						{#if isLoading}
 							<svg class="w-4 h-4 lg:w-5 lg:h-5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -1637,46 +1637,49 @@
 </div>
 
 <style>
-	/* Copy button styles for AI responses */
+	/* Web3 Copy button styles for AI responses */
 	.copy-button {
 		cursor: pointer;
 		font-size: 0.9em;
 		margin-top: 0.5em;
 		padding: 0.25rem 0.5rem;
-		background-color: #f3f4f6;
-		border: 1px solid #d1d5db;
+		background-color: rgba(30, 30, 46, 0.5);
+		border: 1px solid #9B59FF;
 		border-radius: 0.375rem;
-		color: #6b7280;
+		color: #9B59FF;
 		transition: all 0.2s ease-in-out;
 		display: inline-flex;
 		align-items: center;
 		font-size: 0.75rem;
 		font-weight: 500;
+		backdrop-filter: blur(10px);
 	}
 
 	.copy-button:hover {
-		background-color: #e5e7eb;
-		border-color: #9ca3af;
-		color: #374151;
+		background-color: rgba(155, 89, 255, 0.1);
+		border-color: #B026FF;
+		color: #B026FF;
 		transform: translateY(-1px);
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 0 10px rgba(155, 89, 255, 0.3);
 	}
 
 	.copy-button:focus {
 		outline: none;
-		box-shadow: 0 0 0 2px #3b82f6;
+		box-shadow: 0 0 0 2px rgba(155, 89, 255, 0.5);
 	}
 
 	.copy-button.copied {
-		color: #059669;
-		background-color: #d1fae5;
-		border-color: #10b981;
+		color: #00FFD1;
+		background-color: rgba(0, 255, 209, 0.1);
+		border-color: #00FFD1;
+		box-shadow: 0 0 10px rgba(0, 255, 209, 0.3);
 	}
 
 	.copy-button.failed {
-		color: #dc2626;
-		background-color: #fee2e2;
-		border-color: #ef4444;
+		color: #FF00FF;
+		background-color: rgba(255, 0, 255, 0.1);
+		border-color: #FF00FF;
+		box-shadow: 0 0 10px rgba(255, 0, 255, 0.3);
 	}
 
 	/* AI response container positioning */
