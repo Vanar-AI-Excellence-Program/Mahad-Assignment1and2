@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prism.js Test</title>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f9fafb;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1f2937;
+            text-align: center;
+        }
+        h2 {
+            color: #374151;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 8px;
+        }
+    </style>
+    <!-- Import our custom Prism CSS -->
+    <link rel="stylesheet" href="src/lib/assets/prism-custom.css">
+</head>
+<body>
+    <h1>Prism.js Syntax Highlighting Test</h1>
+    
+    <div class="test-section">
+        <h2>JavaScript Example</h2>
+        <pre class="code-content"><code class="language-javascript">function fibonacci(n) {
+    if (n <= 1) return n;
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+const result = fibonacci(10);
+console.log(`Fibonacci of 10 is: ${result}`);</code></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>TypeScript Example</h2>
+        <pre class="code-content"><code class="language-typescript">interface User {
+    id: number;
+    name: string;
+    email: string;
+    isActive: boolean;
+}
+
+const user: User = {
+    id: 1,
+    name: "John Doe",
+    email: "john@example.com",
+    isActive: true
+};</code></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>Python Example</h2>
+        <pre class="code-content"><code class="language-python">def quick_sort(arr):
+    if len(arr) <= 1:
+        return arr
+    pivot = arr[len(arr) // 2]
+    left = [x for x in arr if x < pivot]
+    middle = [x for x in arr if x == pivot]
+    right = [x for x in arr if x > pivot]
+    return quick_sort(left) + middle + quick_sort(right)
+
+# Test the function
+numbers = [3, 6, 8, 10, 1, 2, 1]
+sorted_numbers = quick_sort(numbers)
+print(f"Sorted: {sorted_numbers}")</code></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>HTML Example</h2>
+        <pre class="code-content"><code class="language-markup">&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+    &lt;meta charset="UTF-8"&gt;
+    &lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;
+    &lt;title&gt;Test Page&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;h1&gt;Hello World&lt;/h1&gt;
+    &lt;p&gt;This is a test paragraph.&lt;/p&gt;
+    &lt;script src="app.js"&gt;&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>CSS Example</h2>
+        <pre class="code-content"><code class="language-css">.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #f5f5f5;
+}
+
+.button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}</code></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>JSON Example</h2>
+        <pre class="code-content"><code class="language-json">{
+    "name": "Test Project",
+    "version": "1.0.0",
+    "description": "A test project for syntax highlighting",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js",
+        "dev": "nodemon index.js",
+        "test": "jest"
+    },
+    "dependencies": {
+        "express": "^4.17.1",
+        "cors": "^2.8.5"
+    }
+}</code></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>SQL Example</h2>
+        <pre class="code-content"><code class="language-sql">SELECT 
+    u.id,
+    u.name,
+    u.email,
+    COUNT(p.id) as post_count
+FROM users u
+LEFT JOIN posts p ON u.id = p.user_id
+WHERE u.is_active = true
+GROUP BY u.id, u.name, u.email
+HAVING COUNT(p.id) > 0
+ORDER BY post_count DESC
+LIMIT 10;</code></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>Bash Example</h2>
+        <pre class="code-content"><code class="language-bash">#!/bin/bash
+
+# Function to check if a service is running
+check_service() {
+    local service_name=$1
+    if systemctl is-active --quiet $service_name; then
+        echo "$service_name is running"
+        return 0
+    else
+        echo "$service_name is not running"
+        return 1
+    fi
+}
+
+# Check multiple services
+services=("nginx" "postgresql" "redis")
+for service in "${services[@]}"; do
+    check_service $service
+done</code></pre>
+    </div>
+
+    <!-- Import Prism.js and language components -->
+    <script src="node_modules/prismjs/prism.js"></script>
+    <script src="node_modules/prismjs/components/prism-javascript.js"></script>
+    <script src="node_modules/prismjs/components/prism-typescript.js"></script>
+    <script src="node_modules/prismjs/components/prism-python.js"></script>
+    <script src="node_modules/prismjs/components/prism-markup.js"></script>
+    <script src="node_modules/prismjs/components/prism-css.js"></script>
+    <script src="node_modules/prismjs/components/prism-json.js"></script>
+    <script src="node_modules/prismjs/components/prism-sql.js"></script>
+    <script src="node_modules/prismjs/components/prism-bash.js"></script>
+    
+    <script>
+        // Initialize Prism.js highlighting
+        document.addEventListener('DOMContentLoaded', function() {
+            Prism.highlightAll();
+            console.log('Prism.js highlighting initialized');
+        });
+    </script>
+</body>
+</html>

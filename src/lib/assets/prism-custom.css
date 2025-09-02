@@ -1,0 +1,248 @@
+/**
+ * Custom Prism.js Syntax Highlighting Styles
+ * 
+ * Minimal, optimized styles that integrate with the existing design system.
+ * Based on Tomorrow Night theme with custom enhancements.
+ */
+
+/* Code block wrapper */
+.code-block-wrapper {
+  @apply my-4 rounded-lg overflow-hidden border border-gray-200 shadow-sm;
+  background: #2d3748;
+}
+
+/* Code header with language label and copy button */
+.code-header {
+  @apply flex items-center justify-between px-4 py-2 bg-gray-800 text-white;
+  border-bottom: 1px solid #4a5568;
+}
+
+.language-label {
+  @apply text-sm font-medium text-gray-300;
+}
+
+.copy-button {
+  @apply p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 transition-colors duration-200;
+}
+
+.copy-icon {
+  @apply w-4 h-4;
+}
+
+/* Code content area */
+.code-content {
+  @apply p-4 overflow-x-auto text-sm font-mono leading-relaxed;
+  background: #2d3748;
+  color: #e2e8f0;
+  margin: 0;
+}
+
+/* Prism.js token colors - Tomorrow Night inspired */
+.code-content .token.comment,
+.code-content .token.prolog,
+.code-content .token.doctype,
+.code-content .token.cdata {
+  color: #718096;
+  font-style: italic;
+}
+
+.code-content .token.punctuation {
+  color: #e2e8f0;
+}
+
+.code-content .token.property,
+.code-content .token.tag,
+.code-content .token.constant,
+.code-content .token.symbol,
+.code-content .token.deleted {
+  color: #f56565;
+}
+
+.code-content .token.boolean,
+.code-content .token.number {
+  color: #d69e2e;
+}
+
+.code-content .token.selector,
+.code-content .token.attr-name,
+.code-content .token.string,
+.code-content .token.char,
+.code-content .token.builtin,
+.code-content .token.inserted {
+  color: #68d391;
+}
+
+.code-content .token.operator,
+.code-content .token.entity,
+.code-content .token.url,
+.code-content .language-css .token.string,
+.code-content .style .token.string,
+.code-content .token.variable {
+  color: #e2e8f0;
+}
+
+.code-content .token.atrule,
+.code-content .token.attr-value,
+.code-content .token.function,
+.code-content .token.class-name {
+  color: #f6ad55;
+}
+
+.code-content .token.keyword {
+  color: #63b3ed;
+  font-weight: 600;
+}
+
+.code-content .token.regex,
+.code-content .token.important {
+  color: #f6ad55;
+}
+
+/* Language-specific enhancements */
+.code-content .language-javascript .token.template-string {
+  color: #68d391;
+}
+
+.code-content .language-typescript .token.interface {
+  color: #63b3ed;
+}
+
+.code-content .language-python .token.decorator {
+  color: #63b3ed;
+}
+
+.code-content .language-css .token.property {
+  color: #f56565;
+}
+
+.code-content .language-json .token.property {
+  color: #68d391;
+}
+
+/* Line numbers plugin styles */
+.code-content.line-numbers {
+  @apply relative;
+  padding-left: 3.8em;
+  counter-reset: linenumber;
+}
+
+.code-content.line-numbers .line-numbers-rows {
+  @apply absolute left-0 top-0 w-12 text-center text-gray-500 text-xs;
+  border-right: 1px solid #4a5568;
+  background: #1a202c;
+  padding: 1rem 0.5rem;
+  line-height: 1.5;
+}
+
+.code-content.line-numbers .line-numbers-rows > span {
+  @apply block;
+  counter-increment: linenumber;
+}
+
+.code-content.line-numbers .line-numbers-rows > span:before {
+  content: counter(linenumber);
+  @apply text-gray-500;
+}
+
+/* Inline code styles */
+:not(pre) > code {
+  @apply bg-gray-100 text-gray-800 px-2 py-1 rounded text-sm font-mono border border-gray-200;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .code-block-wrapper {
+    @apply border-gray-700;
+    background: #1a202c;
+  }
+  
+  .code-header {
+    @apply bg-gray-900;
+    border-bottom-color: #2d3748;
+  }
+  
+  .code-content {
+    background: #1a202c;
+    color: #e2e8f0;
+  }
+  
+  .code-content.line-numbers .line-numbers-rows {
+    background: #0f1419;
+    border-right-color: #2d3748;
+  }
+  
+  :not(pre) > code {
+    @apply bg-gray-800 text-gray-200 border-gray-600;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .code-content {
+    @apply text-xs p-3;
+  }
+  
+  .code-header {
+    @apply px-3 py-1.5;
+  }
+  
+  .language-label {
+    @apply text-xs;
+  }
+  
+  .copy-button {
+    @apply p-1;
+  }
+  
+  .copy-icon {
+    @apply w-3 h-3;
+  }
+}
+
+/* Focus states for accessibility */
+.copy-button:focus {
+  @apply outline-none ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-800;
+}
+
+/* Animation for copy success */
+.copy-button.copied {
+  @apply bg-green-600 text-white;
+}
+
+/* Scrollbar styling for code blocks */
+.code-content::-webkit-scrollbar {
+  height: 6px;
+}
+
+.code-content::-webkit-scrollbar-track {
+  background: #2d3748;
+}
+
+.code-content::-webkit-scrollbar-thumb {
+  background: #4a5568;
+  border-radius: 3px;
+}
+
+.code-content::-webkit-scrollbar-thumb:hover {
+  background: #718096;
+}
+
+/* Print styles */
+@media print {
+  .code-block-wrapper {
+    @apply border-gray-300 bg-white;
+    break-inside: avoid;
+  }
+  
+  .code-header {
+    @apply bg-gray-100 text-gray-800 border-gray-300;
+  }
+  
+  .code-content {
+    @apply bg-white text-gray-900;
+  }
+  
+  .copy-button {
+    @apply hidden;
+  }
+}
