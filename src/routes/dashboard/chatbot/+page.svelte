@@ -721,8 +721,10 @@
 										);
 
 										if (regeneratedMessage) {
-											currentNodeId = regeneratedMessage.id;
-											console.log('Navigated to regenerated AI response:', regeneratedMessage.id);
+											// Navigate to the latest AI response in the subtree from this regeneration
+											// This ensures we see the continuation of the conversation from this AI response
+											currentNodeId = getLatestAssistantInSubtree(currentChatTree, regeneratedMessage.id);
+											console.log('Navigated to regenerated AI response with continuation:', currentNodeId);
 											saveUIState();
 										}
 										break;
@@ -770,8 +772,10 @@
 		const previousRegenerationId = goToPreviousRegeneration(currentChatTree, messageId);
 		console.log('Previous regeneration ID:', previousRegenerationId);
 		if (previousRegenerationId) {
-			currentNodeId = previousRegenerationId;
-			console.log('Successfully navigated to previous regeneration:', currentNodeId);
+			// Navigate to the latest AI response in the subtree from this regeneration
+			// This ensures we see the continuation of the conversation from this AI response
+			currentNodeId = getLatestAssistantInSubtree(currentChatTree, previousRegenerationId);
+			console.log('Successfully navigated to previous regeneration with continuation:', currentNodeId);
 			// Trigger reactive update
 			currentNodeId = currentNodeId;
 		} else {
@@ -784,8 +788,10 @@
 		const nextRegenerationId = goToNextRegeneration(currentChatTree, messageId);
 		console.log('Next regeneration ID:', nextRegenerationId);
 		if (nextRegenerationId) {
-			currentNodeId = nextRegenerationId;
-			console.log('Successfully navigated to next regeneration:', currentNodeId);
+			// Navigate to the latest AI response in the subtree from this regeneration
+			// This ensures we see the continuation of the conversation from this AI response
+			currentNodeId = getLatestAssistantInSubtree(currentChatTree, nextRegenerationId);
+			console.log('Successfully navigated to next regeneration with continuation:', currentNodeId);
 			// Trigger reactive update
 			currentNodeId = currentNodeId;
 		} else {
